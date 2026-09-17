@@ -1,8 +1,20 @@
 <?php
 
-use Illuminate\Http\Request;
+use App\Http\Controllers\Api\AuthController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
+Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login']);
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/user', [AuthController::class, 'user']);
+
+    Route::get('/admin/ping', function () {
+        return response()->json(['message' => 'pong from admin route']);
+    })->middleware('role:admin');
+
+    Route::get('/personnel/ping', function () {
+        return response()->json(['message' => 'pong from personnel route']);
+    })->middleware('role:admin,personnel');
+});
