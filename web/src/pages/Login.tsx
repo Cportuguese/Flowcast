@@ -35,39 +35,43 @@ export function Login() {
 
   return (
     <AuthLayout>
-      <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
-      <p className="mt-1 text-sm text-slate-500">Please enter your details to sign in.</p>
+      <h2 className="text-center text-3xl font-bold text-slate-900">Welcome back</h2>
+      <p className="mt-2 text-center text-base text-slate-500">
+        Please enter your details to sign in.
+      </p>
 
-      <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+      <form onSubmit={handleSubmit} className="mt-10 space-y-6">
         {error && (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+          <p className="rounded-lg bg-red-50 px-4 py-3 text-center text-sm text-red-700">
+            {error}
+          </p>
         )}
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="email">
+          <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="email">
             Email Address
           </label>
           <div className="relative">
-            <MailIcon className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+            <MailIcon className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
             <input
               id="email"
               type="email"
               required
               autoComplete="email"
-              placeholder="name@flowcast.edu.ph"
+              placeholder="you@example.com"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="w-full rounded-lg border border-slate-300 py-2.5 pl-10 pr-3 text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-lg border border-slate-300 py-3.5 pl-11 pr-4 text-base focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
           </div>
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="password">
+          <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="password">
             Password
           </label>
           <div className="relative">
-            <LockIcon className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+            <LockIcon className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
             <input
               id="password"
               type="password"
@@ -76,7 +80,7 @@ export function Login() {
               placeholder="••••••••"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-lg border border-slate-300 py-2.5 pl-10 pr-3 text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-lg border border-slate-300 py-3.5 pl-11 pr-4 text-base focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
           </div>
         </div>
@@ -84,19 +88,19 @@ export function Login() {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 py-3.5 text-base font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
         >
           {isSubmitting ? (
             'Signing in...'
           ) : (
             <>
               Sign in
-              <ArrowRightIcon className="h-4 w-4" />
+              <ArrowRightIcon className="h-5 w-5" />
             </>
           )}
         </button>
 
-        <p className="text-center text-xs text-slate-400">
+        <p className="text-center text-sm text-slate-400">
           Need access? Contact your clinic administrator.
         </p>
       </form>

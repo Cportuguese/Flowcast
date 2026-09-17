@@ -48,14 +48,14 @@ export default function Login() {
       <ScrollView keyboardShouldPersistTaps="handled">
         <AuthHeader />
 
-        <View className="px-6 pt-8">
-          <Text className="text-2xl font-bold text-slate-900">Welcome back</Text>
-          <Text className="mt-1 text-sm text-slate-500">
+        <View className="px-6 pt-10">
+          <Text className="text-center text-3xl font-bold text-slate-900">Welcome back</Text>
+          <Text className="mt-2 text-center text-base text-slate-500">
             Please enter your details to sign in.
           </Text>
 
           {error && (
-            <Text className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            <Text className="mt-6 rounded-lg bg-red-50 px-4 py-3 text-center text-sm text-red-700">
               {error}
             </Text>
           )}
@@ -67,7 +67,7 @@ export default function Login() {
             autoCapitalize="none"
             keyboardType="email-address"
             autoComplete="email"
-            placeholder="name@flowcast.edu.ph"
+            placeholder="you@example.com"
             placeholderTextColor="#94a3b8"
             className="rounded-lg border border-slate-300 px-3 py-3 text-sm"
           />
