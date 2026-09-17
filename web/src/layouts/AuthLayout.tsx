@@ -13,8 +13,8 @@ export function AuthLayout({ children }: { children: ReactNode }) {
         </div>
 
         <div className="relative">
-          <p className="text-sm font-semibold tracking-[0.2em] text-blue-300">CAMPUS HEALTH PORTAL</p>
-          <h1 className="mt-3 text-4xl font-extrabold leading-tight">
+          <p className="text-sm font-semibold tracking-[0.2em] text-blue-300">FLOWCAST</p>
+          <h1 className="mt-6 text-4xl font-extrabold leading-tight">
             FLOW<span className="text-blue-400">CAST</span>
           </h1>
           <p className="mt-4 max-w-xs text-sm text-slate-300">

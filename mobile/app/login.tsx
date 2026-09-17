@@ -100,7 +100,7 @@ export default function Login() {
 
           <Pressable onPress={() => router.push('/register')} className="mb-8 mt-4">
             <Text className="text-center text-sm text-blue-600">
-              Need an account? Register
+              Need an account? Register using your UDD email.
             </Text>
           </Pressable>
         </View>
