@@ -1,18 +1,18 @@
-import { Text, View } from 'react-native';
+import { Image, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function AuthHeader() {
   const insets = useSafeAreaInsets();
 
   return (
-    <View className="bg-[#0b1636] px-6 pb-10" style={{ paddingTop: insets.top + 24 }}>
-      <View className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-600">
-        <View className="h-5 w-5 rotate-45 rounded-sm border-2 border-white" />
+    <View className="items-center bg-[#0b1636] pb-8" style={{ paddingTop: insets.top + 32 }}>
+      <View className="rounded-2xl bg-white px-4 py-3">
+        <Image
+          source={require('../assets/logo.png')}
+          resizeMode="contain"
+          style={{ width: 96, height: 96 }}
+        />
       </View>
-      <Text className="mt-4 text-xs font-semibold tracking-[3px] text-blue-300">FLOWCAST</Text>
-      <Text className="mt-1 text-3xl font-extrabold text-white">
-        FLOW<Text className="text-blue-400">CAST</Text>
-      </Text>
     </View>
   );
 }
