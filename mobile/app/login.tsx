@@ -1,7 +1,17 @@
 import axios from 'axios';
-import { Link, router } from 'expo-router';
+import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { AuthHeader } from '../components/AuthHeader';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
@@ -31,47 +41,70 @@ export default function Login() {
   }
 
   return (
-    <View className="flex-1 justify-center bg-white px-6">
-      <Text className="mb-6 text-2xl font-semibold text-gray-900">Log in</Text>
+    <KeyboardAvoidingView
+      className="flex-1 bg-white"
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView keyboardShouldPersistTaps="handled">
+        <AuthHeader />
 
-      {error && (
-        <Text className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</Text>
-      )}
+        <View className="px-6 pt-8">
+          <Text className="text-2xl font-bold text-slate-900">Welcome back</Text>
+          <Text className="mt-1 text-sm text-slate-500">
+            Please enter your details to sign in.
+          </Text>
 
-      <Text className="mb-1 text-sm font-medium text-gray-700">Email</Text>
-      <TextInput
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-        autoComplete="email"
-        className="mb-4 rounded border border-gray-300 px-3 py-2"
-      />
+          {error && (
+            <Text className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </Text>
+          )}
 
-      <Text className="mb-1 text-sm font-medium text-gray-700">Password</Text>
-      <TextInput
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        autoComplete="current-password"
-        className="mb-6 rounded border border-gray-300 px-3 py-2"
-      />
+          <Text className="mb-1 mt-6 text-sm font-medium text-slate-700">Email Address</Text>
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            autoComplete="email"
+            placeholder="name@flowcast.edu.ph"
+            placeholderTextColor="#94a3b8"
+            className="rounded-lg border border-slate-300 px-3 py-3 text-sm"
+          />
 
-      <Pressable
-        onPress={handleSubmit}
-        disabled={isSubmitting}
-        className="items-center rounded bg-indigo-600 py-3 disabled:opacity-50"
-      >
-        {isSubmitting ? (
-          <ActivityIndicator color="white" />
-        ) : (
-          <Text className="font-medium text-white">Log in</Text>
-        )}
-      </Pressable>
+          <Text className="mb-1 mt-4 text-sm font-medium text-slate-700">Password</Text>
+          <TextInput
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            autoComplete="current-password"
+            placeholder="••••••••"
+            placeholderTextColor="#94a3b8"
+            className="rounded-lg border border-slate-300 px-3 py-3 text-sm"
+          />
 
-      <Link href="/register" className="mt-4 text-center text-indigo-600">
-        Need an account? Register
-      </Link>
-    </View>
+          <Pressable
+            onPress={handleSubmit}
+            disabled={isSubmitting}
+            className="mt-6 flex-row items-center justify-center gap-2 rounded-lg bg-blue-600 py-3 disabled:opacity-50"
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <>
+                <Text className="font-semibold text-white">Sign in</Text>
+                <Text className="font-semibold text-white">→</Text>
+              </>
+            )}
+          </Pressable>
+
+          <Pressable onPress={() => router.push('/register')} className="mb-8 mt-4">
+            <Text className="text-center text-sm text-blue-600">
+              Need an account? Register
+            </Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
