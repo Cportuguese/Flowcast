@@ -1,0 +1,46 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+vendor/
+
+# Laravel
+/api/storage/*.key
+/api/public/hot
+/api/public/storage
+/api/public/build
+/api/bootstrap/cache/*.php
+/api/.phpunit.cache
+
+# Expo / React Native
+.expo/
+dist/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+/ios
+/android
+
+# Build output
+build/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+Thumbs.db
+
+# Claude Code local session state
+.claude/
