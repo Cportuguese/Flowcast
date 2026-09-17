@@ -48,14 +48,12 @@ export default function Login() {
       <ScrollView keyboardShouldPersistTaps="handled">
         <AuthHeader />
 
-        <View className="px-6 pt-10">
-          <Text className="text-center text-3xl font-bold text-slate-900">Welcome back</Text>
-          <Text className="mt-2 text-center text-base text-slate-500">
-            Please enter your details to sign in.
-          </Text>
+        <View className="px-6 pt-8">
+          <Text className="text-3xl font-bold text-slate-900">Welcome Back</Text>
+          <Text className="mt-1 text-base text-slate-500">Sign in to your clinic account</Text>
 
           {error && (
-            <Text className="mt-6 rounded-lg bg-red-50 px-4 py-3 text-center text-sm text-red-700">
+            <Text className="mt-6 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
             </Text>
           )}
@@ -67,7 +65,7 @@ export default function Login() {
             autoCapitalize="none"
             keyboardType="email-address"
             autoComplete="email"
-            placeholder="you@example.com"
+            placeholder="Enter your email"
             placeholderTextColor="#94a3b8"
             className="rounded-lg border border-slate-300 px-3 py-3 text-sm"
           />
@@ -78,7 +76,7 @@ export default function Login() {
             onChangeText={setPassword}
             secureTextEntry
             autoComplete="current-password"
-            placeholder="••••••••"
+            placeholder="Enter your password"
             placeholderTextColor="#94a3b8"
             className="rounded-lg border border-slate-300 px-3 py-3 text-sm"
           />
@@ -86,21 +84,18 @@ export default function Login() {
           <Pressable
             onPress={handleSubmit}
             disabled={isSubmitting}
-            className="mt-6 flex-row items-center justify-center gap-2 rounded-lg bg-blue-600 py-3 disabled:opacity-50"
+            className="mt-6 items-center justify-center rounded-lg bg-[#0b1636] py-3.5 disabled:opacity-50"
           >
             {isSubmitting ? (
               <ActivityIndicator color="white" />
             ) : (
-              <>
-                <Text className="font-semibold text-white">Sign in</Text>
-                <Text className="font-semibold text-white">→</Text>
-              </>
+              <Text className="text-base font-semibold text-white">Sign in</Text>
             )}
           </Pressable>
 
-          <Pressable onPress={() => router.push('/register')} className="mb-8 mt-4">
-            <Text className="text-center text-sm text-blue-600">
-              Need an account? Register using your UDD email.
+          <Pressable onPress={() => router.push('/register')} className="mb-8 mt-5">
+            <Text className="text-center text-sm text-slate-500">
+              Don't have an account? <Text className="font-semibold text-blue-600">Create Account</Text>
             </Text>
           </Pressable>
         </View>
