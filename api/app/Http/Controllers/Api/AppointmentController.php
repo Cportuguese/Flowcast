@@ -9,6 +9,7 @@ use App\Models\EventDay;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class AppointmentController extends Controller
 {
@@ -143,15 +144,32 @@ class AppointmentController extends Controller
     public function forDate(Request $request)
     {
         $validated = $request->validate([
-            'date' => ['required', 'date_format:Y-m-d'],
+            'date' => ['required_without:status', 'date_format:Y-m-d'],
+            'status' => ['nullable', Rule::in(['booked', 'cancelled', 'checked_in', 'no_show', 'completed'])],
         ]);
 
-        $appointments = Appointment::whereDate('scheduled_at', $validated['date'])
-            ->with('patient:id,name,email,contact_no')
-            ->orderBy('scheduled_at')
-            ->get();
+        $query = Appointment::with('patient:id,name,email,contact_no')->orderBy('scheduled_at');
 
-        return response()->json($appointments);
+        if (! empty($validated['date'])) {
+            $query->whereDate('scheduled_at', $validated['date']);
+        }
+
+        if (! empty($validated['status'])) {
+            $query->where('status', $validated['status']);
+        }
+
+        return response()->json($query->get());
+    }
+
+    public function markNoShow(Appointment $appointment)
+    {
+        if (! in_array($appointment->status, ['booked', 'checked_in'], true)) {
+            return response()->json(['message' => 'This appointment cannot be marked as a no-show.'], 422);
+        }
+
+        $appointment->update(['status' => 'no_show']);
+
+        return response()->json($appointment);
     }
 
     private function buildSlots(Carbon $date, ClinicSchedule $schedule): array

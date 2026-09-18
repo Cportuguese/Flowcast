@@ -5,6 +5,7 @@ export function Dashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const isStaff = user?.role === 'admin' || user?.role === 'personnel'
+  const isAdmin = user?.role === 'admin'
 
   async function handleLogout() {
     await logout()
@@ -30,13 +31,31 @@ export function Dashboard() {
         </p>
 
         {isStaff && (
-          <button
-            type="button"
-            onClick={() => navigate('/queue')}
-            className="mt-6 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
-          >
-            Open Live Queue
-          </button>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/queue')}
+              className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+            >
+              Open Live Queue
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/appointments')}
+              className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+            >
+              Appointments
+            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => navigate('/admin/settings')}
+                className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+              >
+                Clinic Settings
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

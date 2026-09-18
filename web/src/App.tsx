@@ -1,5 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import { AdminSettings } from './pages/AdminSettings'
+import { Appointments } from './pages/Appointments'
 import { Dashboard } from './pages/Dashboard'
 import { Login } from './pages/Login'
 import { QueueBoard } from './pages/QueueBoard'
@@ -21,6 +23,22 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={['admin', 'personnel']}>
             <QueueBoard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/appointments"
+        element={
+          <ProtectedRoute allowedRoles={['admin', 'personnel']}>
+            <Appointments />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/settings"
+        element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminSettings />
           </ProtectedRoute>
         }
       />

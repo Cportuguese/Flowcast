@@ -32,6 +32,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/event-days/{eventDay}', [ScheduleController::class, 'destroyEventDay']);
     });
 
+    Route::get('/schedule', [ScheduleController::class, 'active']);
     Route::get('/appointments/available-slots', [AppointmentController::class, 'availableSlots']);
 
     Route::middleware('role:patient')->group(function () {
@@ -42,6 +43,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('role:admin,personnel')->group(function () {
         Route::get('/appointments', [AppointmentController::class, 'forDate']);
+        Route::patch('/appointments/{appointment}/no-show', [AppointmentController::class, 'markNoShow']);
     });
 
     Route::post('/queue/check-in', [QueueController::class, 'checkIn']);
