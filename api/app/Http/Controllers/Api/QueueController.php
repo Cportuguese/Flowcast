@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\QueueBoardUpdated;
 use App\Events\QueueEntryUpdated;
 use App\Events\QueueUpdated;
+use App\Events\TicketCalled;
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Models\QueueEntry;
@@ -152,6 +154,8 @@ class QueueController extends Controller
             ['queue_entry_id' => $entry->id],
         );
 
+        broadcast(new TicketCalled($today->toDateString(), $entry->queue_number, $entry->patient_id));
+
         $this->broadcastQueue($today);
 
         return response()->json($this->formatEntry($entry->fresh()));
@@ -198,6 +202,36 @@ class QueueController extends Controller
         ]);
     }
 
+    /**
+     * Same-shaped history for a past date, admin-only, for basic reporting.
+     */
+    public function history(string $date)
+    {
+        $day = Carbon::createFromFormat('Y-m-d', $date)->startOfDay();
+
+        return response()->json([
+            'date' => $day->toDateString(),
+            'entries' => $this->entriesFor($day)->map(fn (QueueEntry $entry) => $this->formatEntry($entry))->values()->all(),
+        ]);
+    }
+
+    /**
+     * Public, unauthenticated board for a waiting-room TV display.
+     * No patient data — numbers and statuses only.
+     */
+    public function boardToday()
+    {
+        $today = Carbon::today();
+
+        return response()->json([
+            'date' => $today->toDateString(),
+            'entries' => $this->entriesFor($today)->map(fn (QueueEntry $entry) => [
+                'queue_number' => $entry->queue_number,
+                'status' => $entry->status,
+            ])->values()->all(),
+        ]);
+    }
+
     public function mine(Request $request)
     {
         $today = Carbon::today();
@@ -221,7 +255,31 @@ class QueueController extends Controller
             'entry' => $this->formatEntry($entry),
             'position' => $peopleAhead + 1,
             'people_ahead' => $peopleAhead,
+            'estimated_wait_minutes' => $this->estimatedWaitMinutes($today, $peopleAhead),
         ]);
+    }
+
+    /**
+     * Average consult time from today's completed entries × people ahead,
+     * falling back to a flat estimate before any data exists for the day.
+     */
+    private function estimatedWaitMinutes(Carbon $date, int $peopleAhead): int
+    {
+        if ($peopleAhead === 0) {
+            return 0;
+        }
+
+        $completedToday = QueueEntry::where('queue_date', $date)
+            ->where('status', 'done')
+            ->whereNotNull('called_at')
+            ->whereNotNull('completed_at')
+            ->get();
+
+        $avgMinutes = $completedToday->isEmpty()
+            ? 5
+            : $completedToday->avg(fn (QueueEntry $entry) => $entry->called_at->diffInMinutes($entry->completed_at));
+
+        return (int) round($peopleAhead * max($avgMinutes, 1));
     }
 
     /**
@@ -273,6 +331,14 @@ class QueueController extends Controller
             $entries->map(fn (QueueEntry $entry) => $this->formatEntry($entry))->values()->all(),
         ));
 
+        broadcast(new QueueBoardUpdated(
+            $date->toDateString(),
+            $entries->map(fn (QueueEntry $entry) => [
+                'queue_number' => $entry->queue_number,
+                'status' => $entry->status,
+            ])->values()->all(),
+        ));
+
         $peopleAhead = 0;
 
         foreach ($entries as $entry) {
@@ -283,6 +349,7 @@ class QueueController extends Controller
                 'entry' => $this->formatEntry($entry),
                 'position' => $isWaiting ? $peopleAhead + 1 : null,
                 'people_ahead' => $isWaiting ? $peopleAhead : null,
+                'estimated_wait_minutes' => $isWaiting ? $this->estimatedWaitMinutes($date, $peopleAhead) : null,
             ]));
 
             if ($isWaiting) {

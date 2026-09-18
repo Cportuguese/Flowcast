@@ -46,6 +46,14 @@ export function Dashboard() {
             >
               Appointments
             </button>
+            <a
+              href="/tv-board"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+            >
+              Open TV Board ↗
+            </a>
             {isAdmin && (
               <button
                 type="button"

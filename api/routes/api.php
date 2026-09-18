@@ -11,6 +11,9 @@ Route::middleware('throttle:6,1')->group(function () {
     Route::post('/login', [AuthController::class, 'login']);
 });
 
+// Public, unauthenticated — feeds the waiting-room TV board. No patient data.
+Route::get('/queue-board/today', [QueueController::class, 'boardToday']);
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
@@ -62,4 +65,8 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::patch('/{queueEntry}/skip', [QueueController::class, 'skip']);
         });
     });
+
+    Route::get('/queue/{date}/history', [QueueController::class, 'history'])
+        ->where('date', '\d{4}-\d{2}-\d{2}')
+        ->middleware('role:admin');
 });

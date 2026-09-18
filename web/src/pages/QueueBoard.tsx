@@ -41,6 +41,8 @@ export function QueueBoard() {
   const [isCallingNext, setIsCallingNext] = useState(false)
   const [busyEntryId, setBusyEntryId] = useState<number | null>(null)
 
+  const [statusFilter, setStatusFilter] = useState<'all' | QueueEntry['status']>('all')
+
   const [showWalkInForm, setShowWalkInForm] = useState(false)
   const [walkInName, setWalkInName] = useState('')
   const [walkInContact, setWalkInContact] = useState('')
@@ -48,6 +50,12 @@ export function QueueBoard() {
   const [isSubmittingWalkIn, setIsSubmittingWalkIn] = useState(false)
 
   const channelDateRef = useRef<string | null>(null)
+
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 30_000)
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -157,6 +165,14 @@ export function QueueBoard() {
 
   const waitingCount = entries.filter((e) => e.status === 'waiting').length
   const inConsultation = entries.filter((e) => e.status === 'in_consultation')
+  const visibleEntries = statusFilter === 'all' ? entries : entries.filter((e) => e.status === statusFilter)
+
+  function timeInQueue(entry: QueueEntry) {
+    if (!entry.joined_at) return '—'
+    const end = entry.completed_at ? new Date(entry.completed_at) : new Date()
+    const minutes = Math.max(0, Math.round((end.getTime() - new Date(entry.joined_at).getTime()) / 60_000))
+    return `${minutes} min`
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -264,7 +280,24 @@ export function QueueBoard() {
           </form>
         )}
 
-        <div className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="mt-6 flex gap-1 border-b border-slate-200">
+          {(['all', 'waiting', 'in_consultation', 'done', 'skipped'] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setStatusFilter(tab)}
+              className={`rounded-t-lg px-4 py-2 text-sm font-medium ${
+                statusFilter === tab
+                  ? 'border border-b-white bg-white text-slate-900'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {tab === 'all' ? 'All' : STATUS_LABELS[tab]}
+            </button>
+          ))}
+        </div>
+
+        <div className="overflow-hidden rounded-b-lg rounded-tr-lg border border-slate-200 bg-white shadow-sm">
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
@@ -273,25 +306,26 @@ export function QueueBoard() {
                 <th className="px-4 py-3">Source</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Called</th>
+                <th className="px-4 py-3">Time in queue</th>
                 <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                  <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
                     Loading queue…
                   </td>
                 </tr>
               )}
-              {!isLoading && entries.length === 0 && (
+              {!isLoading && visibleEntries.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                    No one has checked in today yet.
+                  <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
+                    {entries.length === 0 ? 'No one has checked in today yet.' : 'No entries match this filter.'}
                   </td>
                 </tr>
               )}
-              {entries.map((entry) => (
+              {visibleEntries.map((entry) => (
                 <tr key={entry.id}>
                   <td className="px-4 py-3 font-semibold text-slate-900">{entry.queue_number}</td>
                   <td className="px-4 py-3">
@@ -309,6 +343,7 @@ export function QueueBoard() {
                   <td className="px-4 py-3 text-slate-500">
                     {entry.called_at ? new Date(entry.called_at).toLocaleTimeString() : '—'}
                   </td>
+                  <td className="px-4 py-3 text-slate-500">{timeInQueue(entry)}</td>
                   <td className="px-4 py-3">
                     {entry.status === 'in_consultation' && (
                       <div className="flex gap-2">

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, Vibration, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
@@ -39,6 +39,7 @@ export default function Queue() {
   const [entry, setEntry] = useState<QueueEntry | null>(null);
   const [position, setPosition] = useState<number | null>(null);
   const [peopleAhead, setPeopleAhead] = useState<number | null>(null);
+  const [estimatedWaitMinutes, setEstimatedWaitMinutes] = useState<number | null>(null);
   const [todaysAppointment, setTodaysAppointment] = useState<Appointment | null>(null);
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,11 +51,13 @@ export default function Queue() {
       entry: QueueEntry | null;
       position: number | null;
       people_ahead: number | null;
+      estimated_wait_minutes: number | null;
     }>('/queue/mine');
 
     setEntry(response.data.entry);
     setPosition(response.data.position ?? null);
     setPeopleAhead(response.data.people_ahead ?? null);
+    setEstimatedWaitMinutes(response.data.estimated_wait_minutes ?? null);
   }, []);
 
   const loadTodaysAppointment = useCallback(async () => {
@@ -88,14 +91,28 @@ export default function Queue() {
 
     getEcho().then((echo) => {
       channelName = `App.Models.User.${user.id}`;
-      echo.private(channelName).listen(
+      const channel = echo.private(channelName);
+
+      channel.listen(
         '.queue.entry.updated',
-        (payload: { entry: QueueEntry; position: number | null; people_ahead: number | null }) => {
+        (payload: {
+          entry: QueueEntry;
+          position: number | null;
+          people_ahead: number | null;
+          estimated_wait_minutes: number | null;
+        }) => {
           setEntry(payload.entry);
           setPosition(payload.position);
           setPeopleAhead(payload.people_ahead);
+          setEstimatedWaitMinutes(payload.estimated_wait_minutes ?? null);
         },
       );
+
+      // Fires only at the exact moment this patient is called — a
+      // stronger, distinct cue on top of the generic entry update above.
+      channel.listen('.ticket.called', () => {
+        Vibration.vibrate([0, 300, 150, 300]);
+      });
     });
 
     return () => {
@@ -151,6 +168,13 @@ export default function Queue() {
       <View className="px-6">
         <Text className="text-2xl font-bold text-slate-900">Clinic Queue</Text>
         <Text className="mt-1 text-base text-slate-500">Welcome, {user?.name}</Text>
+
+        <Pressable
+          onPress={() => router.push('/my-appointments')}
+          className="mt-4 items-center rounded-lg border border-slate-200 py-3"
+        >
+          <Text className="text-sm font-semibold text-slate-700">My Appointments</Text>
+        </Pressable>
 
         {error && (
           <Text className="mt-6 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</Text>
@@ -213,6 +237,11 @@ export default function Queue() {
                 </Text>
                 {position !== null && (
                   <Text className="mt-1 text-xs text-slate-400">Position #{position} in line</Text>
+                )}
+                {!!estimatedWaitMinutes && (
+                  <Text className="mt-1 text-xs text-slate-400">
+                    Estimated wait: ~{estimatedWaitMinutes} min
+                  </Text>
                 )}
               </View>
             )}

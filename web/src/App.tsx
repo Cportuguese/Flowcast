@@ -5,11 +5,13 @@ import { Appointments } from './pages/Appointments'
 import { Dashboard } from './pages/Dashboard'
 import { Login } from './pages/Login'
 import { QueueBoard } from './pages/QueueBoard'
+import { TvBoard } from './pages/TvBoard'
 
 function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/tv-board" element={<TvBoard />} />
       <Route
         path="/dashboard"
         element={
