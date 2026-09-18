@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\QueueController;
 use App\Http\Controllers\Api\ScheduleController;
+use App\Http\Controllers\Api\VisitController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('throttle:6,1')->group(function () {
@@ -69,4 +70,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/queue/{date}/history', [QueueController::class, 'history'])
         ->where('date', '\d{4}-\d{2}-\d{2}')
         ->middleware('role:admin');
+
+    Route::middleware('role:admin,personnel')->group(function () {
+        Route::post('/visits', [VisitController::class, 'store']);
+        Route::get('/admin/visits/search', [VisitController::class, 'search']);
+    });
+
+    Route::middleware('role:patient')->group(function () {
+        Route::get('/visits/mine', [VisitController::class, 'mine']);
+    });
+
+    Route::get('/visits/{queueEntry}', [VisitController::class, 'show']);
 });

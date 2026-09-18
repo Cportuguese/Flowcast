@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { VisitFormModal } from '../components/VisitFormModal'
 import { useAuth } from '../context/AuthContext'
 import { getEcho } from '../lib/echo'
 import { api } from '../lib/api'
@@ -42,6 +43,7 @@ export function QueueBoard() {
   const [busyEntryId, setBusyEntryId] = useState<number | null>(null)
 
   const [statusFilter, setStatusFilter] = useState<'all' | QueueEntry['status']>('all')
+  const [visitFormEntry, setVisitFormEntry] = useState<QueueEntry | null>(null)
 
   const [showWalkInForm, setShowWalkInForm] = useState(false)
   const [walkInName, setWalkInName] = useState('')
@@ -112,11 +114,12 @@ export function QueueBoard() {
     }
   }
 
-  async function handleComplete(id: number) {
+  async function handleComplete(entry: QueueEntry) {
     setActionError(null)
-    setBusyEntryId(id)
+    setBusyEntryId(entry.id)
     try {
-      await api.patch(`/admin/queue/${id}/complete`)
+      await api.patch(`/admin/queue/${entry.id}/complete`)
+      setVisitFormEntry(entry)
     } catch (err) {
       setActionError(extractErrorMessage(err, 'Unable to mark this entry as done.'))
     } finally {
@@ -350,7 +353,7 @@ export function QueueBoard() {
                         <button
                           type="button"
                           disabled={busyEntryId === entry.id}
-                          onClick={() => handleComplete(entry.id)}
+                          onClick={() => handleComplete(entry)}
                           className="rounded bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
                         >
                           Mark Done
@@ -382,6 +385,15 @@ export function QueueBoard() {
           </table>
         </div>
       </div>
+
+      {visitFormEntry && (
+        <VisitFormModal
+          queueEntryId={visitFormEntry.id}
+          patientName={visitFormEntry.patient.name}
+          onClose={() => setVisitFormEntry(null)}
+          onSaved={() => setVisitFormEntry(null)}
+        />
+      )}
     </div>
   )
 }

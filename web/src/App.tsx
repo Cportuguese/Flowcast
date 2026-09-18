@@ -6,6 +6,7 @@ import { Dashboard } from './pages/Dashboard'
 import { Login } from './pages/Login'
 import { QueueBoard } from './pages/QueueBoard'
 import { TvBoard } from './pages/TvBoard'
+import { VisitsSearch } from './pages/VisitsSearch'
 
 function App() {
   return (
@@ -33,6 +34,14 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={['admin', 'personnel']}>
             <Appointments />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/visits"
+        element={
+          <ProtectedRoute allowedRoles={['admin', 'personnel']}>
+            <VisitsSearch />
           </ProtectedRoute>
         }
       />

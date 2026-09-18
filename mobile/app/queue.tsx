@@ -169,12 +169,20 @@ export default function Queue() {
         <Text className="text-2xl font-bold text-slate-900">Clinic Queue</Text>
         <Text className="mt-1 text-base text-slate-500">Welcome, {user?.name}</Text>
 
-        <Pressable
-          onPress={() => router.push('/my-appointments')}
-          className="mt-4 items-center rounded-lg border border-slate-200 py-3"
-        >
-          <Text className="text-sm font-semibold text-slate-700">My Appointments</Text>
-        </Pressable>
+        <View className="mt-4 flex-row gap-3">
+          <Pressable
+            onPress={() => router.push('/my-appointments')}
+            className="flex-1 items-center rounded-lg border border-slate-200 py-3"
+          >
+            <Text className="text-sm font-semibold text-slate-700">My Appointments</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => router.push('/visit-history')}
+            className="flex-1 items-center rounded-lg border border-slate-200 py-3"
+          >
+            <Text className="text-sm font-semibold text-slate-700">Visit History</Text>
+          </Pressable>
+        </View>
 
         {error && (
           <Text className="mt-6 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</Text>
