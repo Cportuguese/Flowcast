@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\QueueController;
 use App\Http\Controllers\Api\ScheduleController;
 use Illuminate\Support\Facades\Route;
 
@@ -13,6 +14,7 @@ Route::middleware('throttle:6,1')->group(function () {
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
+    Route::patch('/user/push-token', [AuthController::class, 'updatePushToken']);
 
     Route::get('/admin/ping', function () {
         return response()->json(['message' => 'pong from admin route']);
@@ -40,5 +42,22 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('role:admin,personnel')->group(function () {
         Route::get('/appointments', [AppointmentController::class, 'forDate']);
+    });
+
+    Route::post('/queue/check-in', [QueueController::class, 'checkIn']);
+
+    Route::middleware('role:patient')->group(function () {
+        Route::get('/queue/mine', [QueueController::class, 'mine']);
+    });
+
+    Route::middleware('role:admin,personnel')->group(function () {
+        Route::get('/queue/today', [QueueController::class, 'today']);
+
+        Route::prefix('admin/queue')->group(function () {
+            Route::post('/call-next', [QueueController::class, 'callNext']);
+            Route::post('/walk-in', [QueueController::class, 'walkIn']);
+            Route::patch('/{queueEntry}/complete', [QueueController::class, 'complete']);
+            Route::patch('/{queueEntry}/skip', [QueueController::class, 'skip']);
+        });
     });
 });

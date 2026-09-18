@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { Dashboard } from './pages/Dashboard'
 import { Login } from './pages/Login'
+import { QueueBoard } from './pages/QueueBoard'
 
 function App() {
   return (
@@ -12,6 +13,14 @@ function App() {
         element={
           <ProtectedRoute>
             <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/queue"
+        element={
+          <ProtectedRoute allowedRoles={['admin', 'personnel']}>
+            <QueueBoard />
           </ProtectedRoute>
         }
       />

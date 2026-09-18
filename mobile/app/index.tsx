@@ -18,6 +18,10 @@ export default function Index() {
     return <Redirect href="/login" />;
   }
 
+  if (user.role === 'patient') {
+    return <Redirect href="/queue" />;
+  }
+
   async function handleLogout() {
     await logout();
     router.replace('/login');

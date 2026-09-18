@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 export function Dashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const isStaff = user?.role === 'admin' || user?.role === 'personnel'
 
   async function handleLogout() {
     await logout()
@@ -27,6 +28,16 @@ export function Dashboard() {
         <p className="mt-4 text-gray-600">
           Welcome, {user?.name} ({user?.role})
         </p>
+
+        {isStaff && (
+          <button
+            type="button"
+            onClick={() => navigate('/queue')}
+            className="mt-6 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+          >
+            Open Live Queue
+          </button>
+        )}
       </div>
     </div>
   )

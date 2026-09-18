@@ -86,4 +86,18 @@ class AuthController extends Controller
     {
         return response()->json($request->user());
     }
+
+    /**
+     * Store the Expo push token for the current device.
+     */
+    public function updatePushToken(Request $request)
+    {
+        $validated = $request->validate([
+            'push_token' => ['required', 'string', 'max:255'],
+        ]);
+
+        $request->user()->update(['push_token' => $validated['push_token']]);
+
+        return response()->json(['message' => 'Push token saved.']);
+    }
 }
