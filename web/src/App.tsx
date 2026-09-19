@@ -10,6 +10,7 @@ import { Inventory } from './pages/Inventory'
 import { InventoryHistory } from './pages/InventoryHistory'
 import { Login } from './pages/Login'
 import { QueueBoard } from './pages/QueueBoard'
+import { QueueHistory } from './pages/QueueHistory'
 import { Reports } from './pages/Reports'
 import { TvBoard } from './pages/TvBoard'
 import { VisitsSearch } from './pages/VisitsSearch'
@@ -36,6 +37,7 @@ function App() {
           <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
             <Route path="/admin/settings" element={<AdminSettings />} />
             <Route path="/admin/reports" element={<Reports />} />
+            <Route path="/admin/queue-history" element={<QueueHistory />} />
             <Route path="/admin/inventory/history" element={<InventoryHistory />} />
             <Route path="/admin/audit-log" element={<AuditLog />} />
           </Route>

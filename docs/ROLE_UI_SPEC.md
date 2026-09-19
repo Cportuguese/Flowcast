@@ -30,7 +30,7 @@ Access is enforced in two layers that agree with each other:
 | Audit Log *(admin only)* | Filter + Search (read-only) | `GET /admin/audit-logs` |
 | Inventory | Low-stock / expiring banners, Stock in, Stock out, expand row for batches, **Add/Edit/Archive medicine, Dispose expired, History** | `GET /medicines`, `POST /inventory/stock-in`, `POST /inventory/stock-out`, `GET /inventory/expiring-soon`, `POST/PATCH /admin/medicines`, `GET /admin/inventory/expired`, `POST /admin/inventory/batches/{id}/dispose` |
 | Inventory History *(admin only)* | Filter by date/medicine/type, Download CSV | `GET /admin/inventory/history` |
-| API-only, no UI yet | Queue history by date | `GET /queue/{date}/history` (admin only) |
+| Queue History *(admin only)* | Date picker, per-day stats (total / completed / skipped / avg wait), read-only table with wait + consult minutes | `GET /queue/{date}/history` |
 
 ### PERSONNEL (web) — ✅ confirmed
 Everything in the Admin table **except** Clinic Settings, Reports, Audit Log, queue history, medicine catalog edits, expired-batch disposal, and Inventory History. Personnel can: Call Next, Register walk-in, Mark Done, Mark Skipped, Save visit record (incl. medicines given, which deducts stock), Mark No-show, search Visit Records, view Analytics, open TV Board, view Inventory, Stock in, Stock out.
@@ -46,7 +46,7 @@ Everything in the Admin table **except** Clinic Settings, Reports, Audit Log, qu
 | Visit History / Detail | Tap visit → detail (read-only), Close | `GET /visits/mine`, `GET /visits/{queueEntry}` |
 | Login / Register | Sign in, Create Account | `POST /login`, `POST /register` |
 
-Patient on **web**: reaches `/dashboard` and sees only "Welcome … Log out" ([Dashboard.tsx:33](web/src/pages/Dashboard.tsx#L33)). All other routes redirect to `/dashboard`.
+Patient on **web**: `/dashboard` shows a "Flowcast for patients lives in the mobile app" card ([PatientWebNotice.tsx](web/src/components/PatientWebNotice.tsx)); staff routes show an access-denied card.
 
 ### TV BOARD (public, no login) — ✅ confirmed
 [TvBoard.tsx](web/src/pages/TvBoard.tsx): **zero buttons**. Shows "Now Serving #N" and "Up Next" (10 numbers). Live via public channel `queue-board.{date}`, chime on `ticket.called`. Data is numbers + status only (no names) — correct for a public screen.
@@ -54,12 +54,12 @@ Patient on **web**: reaches `/dashboard` and sees only "Welcome … Log out" ([D
 ### Not in the system (but referenced in memory)
 - **Medical certificate generation** — no endpoint, no button anywhere (`grep certificat` → 0 hits). Deferred at Phase 4. Intended rule (from project memory): personnel generate; admin view/download only. Included below as *planned* placeholders, clearly marked.
 
-### Gaps found during confirmation
-1. Web has **no shared shell** — 8 pages each duplicate header/Back/Log out.
-2. Patient on web → empty page; staff on mobile → placeholder ([mobile/app/index.tsx](mobile/app/index.tsx)). Both need a friendly "wrong app" page.
-3. Mobile Register never sends `patient_type` / `contact_no` although the API accepts them — patient profile is incomplete, which hurts walk-in matching and certificates later.
-4. Admin has no UI for `GET /queue/{date}/history`.
-5. `ProtectedRoute` redirects silently on wrong role — no "not allowed" message.
+### Gaps found during confirmation — all resolved (Sep 20, 2026)
+1. ~~Web has no shared shell~~ → [AppShell.tsx](web/src/components/AppShell.tsx) + [PageHeader.tsx](web/src/components/PageHeader.tsx); routes nested in [App.tsx](web/src/App.tsx).
+2. ~~Patient on web / staff on mobile see empty or placeholder pages~~ → [PatientWebNotice.tsx](web/src/components/PatientWebNotice.tsx) and the staff notice in [mobile/app/index.tsx](mobile/app/index.tsx).
+3. ~~Mobile Register never sends `patient_type` / `contact_no`~~ → optional "I am a" chips + Contact Number in [register.tsx](mobile/app/register.tsx).
+4. ~~Admin has no UI for queue history~~ → [QueueHistory.tsx](web/src/pages/QueueHistory.tsx) at `/admin/queue-history`.
+5. ~~`ProtectedRoute` redirects silently on wrong role~~ → renders an access-denied card with a link home ([ProtectedRoute.tsx](web/src/components/ProtectedRoute.tsx)).
 
 ---
 
@@ -119,10 +119,13 @@ Sidebar visibility per role:
 | Live Queue | ✅ | ✅ | — |
 | Appointments | ✅ | ✅ | — |
 | Visit Records | ✅ | ✅ | — |
+| Inventory | ✅ | ✅ | — |
 | Analytics | ✅ | ✅ *(keep as today; flag if you want it admin-only)* | — |
 | TV Board ↗ (new tab) | ✅ | ✅ | — |
 | Clinic Settings | ✅ | ✗ | — |
 | Reports | ✅ | ✗ | — |
+| Queue History | ✅ | ✗ | — |
+| Inventory History | ✅ | ✗ | — |
 | Audit Log | ✅ | ✗ | — |
 | Log out | ✅ | ✅ | ✅ |
 
@@ -275,7 +278,7 @@ Additions: clock, live/offline dot (Echo connection state), closed state. Never 
 | Weekly hours Save / Event day Flag / Remove | ✅ | ✗ | ✗ | ✗ |
 | Run report / Download CSV / Print | ✅ | ✗ | ✗ | ✗ |
 | Audit log Search | ✅ | ✗ | ✗ | ✗ |
-| Queue history by date | ✅ *(UI to add)* | ✗ | ✗ | ✗ |
+| Queue history by date | ✅ | ✗ | ✗ | ✗ |
 | Check in (walk-in / appointment) | ✗ | ✗ | ✅ | ✗ |
 | Book / Cancel appointment | ✗ | ✗ | ✅ | ✗ |
 | View own visit history | ✗ | ✗ | ✅ | ✗ |
@@ -297,9 +300,9 @@ All ✅/✗ in the non-italic rows are **already enforced today** at both API an
 
 ## Implementation order (for a future session — NOT this one)
 
-1. `web/src/components/AppShell.tsx` + `PageHeader`, `StatTile`, `StatusPill`, `Button` → wrap existing pages, delete per-page Back/Log out.
+1. ~~`AppShell` + `PageHeader`~~ — done (commit d252b25). `StatTile`, `StatusPill`, `Button` still to extract as the Home pages need them.
 2. Split `Dashboard.tsx` into `StaffHome` (role-switched Personnel/Admin layout) + `PatientWebNotice`.
-3. Small `QueueHistory` page for admin (`GET /queue/{date}/history`).
+3. ~~Small `QueueHistory` page for admin~~ — done with the Part 1 gap fixes.
 4. Mobile: `app/(tabs)/` group with `index` (home), `appointments`, `visits`; move Log out to header; send `patient_type`/`contact_no` on register.
 5. TV board: clock, connection dot, closed state.
 6. Certificates: separate phase (API first), then the three planned buttons.

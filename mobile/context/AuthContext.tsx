@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { api, clearToken, getToken, onUnauthorized, setToken } from '../lib/api';
 import { disconnectEcho } from '../lib/echo';
 
+export type PatientType = 'student' | 'faculty' | 'staff';
+
 interface User {
   id: number;
   name: string;
@@ -19,6 +21,8 @@ interface AuthContextValue {
     email: string;
     password: string;
     password_confirmation: string;
+    patient_type?: PatientType;
+    contact_no?: string;
   }) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -74,6 +78,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string;
     password: string;
     password_confirmation: string;
+    patient_type?: PatientType;
+    contact_no?: string;
   }) {
     const response = await api.post<{ user: User; token: string }>('/register', {
       ...params,

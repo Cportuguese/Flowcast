@@ -1,6 +1,6 @@
 import { Redirect, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 
 export default function Index() {
@@ -27,13 +27,25 @@ export default function Index() {
     router.replace('/login');
   }
 
+  // Admin / personnel have no mobile UI; point them to the web dashboard.
   return (
-    <View className="flex-1 items-center justify-center gap-4 bg-white">
-      <Text className="text-lg">
-        Welcome, {user.name} ({user.role})
+    <View className="flex-1 items-center justify-center bg-white px-8">
+      <Image source={require('../assets/logo.png')} className="h-20 w-20" resizeMode="contain" />
+      <Text className="mt-6 text-center text-xl font-bold text-slate-900">
+        Staff tools are on the web dashboard
       </Text>
-      <Pressable onPress={handleLogout} className="rounded bg-gray-200 px-4 py-2">
-        <Text className="font-medium text-gray-800">Log out</Text>
+      <Text className="mt-2 text-center text-base text-slate-500">
+        The mobile app is for patients. Sign in on the Flowcast website to manage the queue,
+        appointments, and records.
+      </Text>
+      <Text className="mt-6 text-sm text-slate-400">
+        Signed in as {user.name} · {user.role}
+      </Text>
+      <Pressable
+        onPress={handleLogout}
+        className="mt-4 w-full items-center rounded-lg bg-[#0b1636] py-3.5"
+      >
+        <Text className="text-base font-semibold text-white">Log out</Text>
       </Pressable>
       <StatusBar style="auto" />
     </View>

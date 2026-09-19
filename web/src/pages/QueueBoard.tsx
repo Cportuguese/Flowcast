@@ -3,33 +3,12 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { VisitFormModal } from '../components/VisitFormModal'
 import { getEcho } from '../lib/echo'
 import { api } from '../lib/api'
+import {
+  QUEUE_STATUS_LABELS,
+  QUEUE_STATUS_STYLES,
+  type QueueEntry,
+} from '../lib/queue'
 import { PageHeader } from '../components/PageHeader'
-
-interface QueueEntry {
-  id: number
-  queue_number: number
-  status: 'waiting' | 'in_consultation' | 'done' | 'skipped'
-  source: 'walk_in' | 'appointment'
-  appointment_id: number | null
-  patient: { id: number; name: string; contact_no: string | null }
-  joined_at: string | null
-  called_at: string | null
-  completed_at: string | null
-}
-
-const STATUS_STYLES: Record<QueueEntry['status'], string> = {
-  waiting: 'bg-slate-100 text-slate-700',
-  in_consultation: 'bg-blue-100 text-blue-700',
-  done: 'bg-green-100 text-green-700',
-  skipped: 'bg-red-100 text-red-700',
-}
-
-const STATUS_LABELS: Record<QueueEntry['status'], string> = {
-  waiting: 'Waiting',
-  in_consultation: 'In Consultation',
-  done: 'Done',
-  skipped: 'Skipped',
-}
 
 export function QueueBoard() {
   const [date, setDate] = useState<string | null>(null)
@@ -273,7 +252,7 @@ export function QueueBoard() {
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              {tab === 'all' ? 'All' : STATUS_LABELS[tab]}
+              {tab === 'all' ? 'All' : QUEUE_STATUS_LABELS[tab]}
             </button>
           ))}
         </div>
@@ -317,8 +296,8 @@ export function QueueBoard() {
                   </td>
                   <td className="px-4 py-3 capitalize text-slate-600">{entry.source.replace('_', ' ')}</td>
                   <td className="px-4 py-3">
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[entry.status]}`}>
-                      {STATUS_LABELS[entry.status]}
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${QUEUE_STATUS_STYLES[entry.status]}`}>
+                      {QUEUE_STATUS_LABELS[entry.status]}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-slate-500">

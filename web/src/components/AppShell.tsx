@@ -22,6 +22,7 @@ const STAFF_NAV: NavItem[] = [
 const ADMIN_NAV: NavItem[] = [
   { to: '/admin/settings', label: 'Clinic Settings' },
   { to: '/admin/reports', label: 'Reports' },
+  { to: '/admin/queue-history', label: 'Queue History' },
   { to: '/admin/inventory/history', label: 'Inventory History' },
   { to: '/admin/audit-log', label: 'Audit Log' },
 ]

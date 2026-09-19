@@ -12,7 +12,13 @@ import {
   View,
 } from 'react-native';
 import { AuthHeader } from '../components/AuthHeader';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, type PatientType } from '../context/AuthContext';
+
+const PATIENT_TYPES: Array<{ value: PatientType; label: string }> = [
+  { value: 'student', label: 'Student' },
+  { value: 'faculty', label: 'Faculty' },
+  { value: 'staff', label: 'Staff' },
+];
 
 export default function Register() {
   const { register } = useAuth();
@@ -20,6 +26,8 @@ export default function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
+  const [patientType, setPatientType] = useState<PatientType | null>(null);
+  const [contactNo, setContactNo] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -33,6 +41,8 @@ export default function Register() {
         email,
         password,
         password_confirmation: passwordConfirmation,
+        patient_type: patientType ?? undefined,
+        contact_no: contactNo.trim() || undefined,
       });
       router.replace('/');
     } catch (err) {
@@ -86,6 +96,37 @@ export default function Register() {
             keyboardType="email-address"
             autoComplete="email"
             placeholder="Enter your email"
+            placeholderTextColor="#94a3b8"
+            className="rounded-lg border border-slate-300 px-3 py-3 text-sm"
+          />
+
+          <Text className="mb-1 mt-4 text-sm font-medium text-slate-700">I am a</Text>
+          <View className="flex-row gap-2">
+            {PATIENT_TYPES.map((type) => {
+              const selected = patientType === type.value;
+              return (
+                <Pressable
+                  key={type.value}
+                  onPress={() => setPatientType(selected ? null : type.value)}
+                  className={`flex-1 items-center rounded-lg border py-3 ${
+                    selected ? 'border-[#0b1636] bg-[#0b1636]' : 'border-slate-300 bg-white'
+                  }`}
+                >
+                  <Text className={`text-sm font-medium ${selected ? 'text-white' : 'text-slate-700'}`}>
+                    {type.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text className="mb-1 mt-4 text-sm font-medium text-slate-700">Contact Number</Text>
+          <TextInput
+            value={contactNo}
+            onChangeText={setContactNo}
+            keyboardType="phone-pad"
+            autoComplete="tel"
+            placeholder="Optional, for clinic follow-ups"
             placeholderTextColor="#94a3b8"
             className="rounded-lg border border-slate-300 px-3 py-3 text-sm"
           />
