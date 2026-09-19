@@ -63,6 +63,13 @@ export function Dashboard() {
             </a>
             <button
               type="button"
+              onClick={() => navigate('/inventory')}
+              className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+            >
+              Inventory
+            </button>
+            <button
+              type="button"
               onClick={() => navigate('/analytics')}
               className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
             >

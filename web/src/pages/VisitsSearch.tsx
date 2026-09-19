@@ -15,6 +15,7 @@ interface Visit {
   diagnosis: string
   treatment: string | null
   referred_to: string | null
+  medicines: Array<{ id: number; name: string; unit: string; quantity: number }>
 }
 
 export function VisitsSearch() {
@@ -171,6 +172,14 @@ export function VisitsSearch() {
                               <p className="text-xs font-medium uppercase text-slate-500">Treatment</p>
                               <p className="text-sm text-slate-700">{visit.treatment ?? '—'}</p>
                             </div>
+                            {visit.medicines.length > 0 && (
+                              <div className="sm:col-span-2">
+                                <p className="text-xs font-medium uppercase text-slate-500">Medicines given</p>
+                                <p className="text-sm text-slate-700">
+                                  {visit.medicines.map((m) => `${m.name} × ${m.quantity} ${m.unit}`).join(', ')}
+                                </p>
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>

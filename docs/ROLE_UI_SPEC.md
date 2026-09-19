@@ -28,10 +28,12 @@ Access is enforced in two layers that agree with each other:
 | Clinic Settings *(admin only)* | Weekly hours per-day Save, Flag event day, Remove event day | `POST /admin/schedules`, `POST/DELETE /admin/event-days` |
 | Reports *(admin only)* | Run (×4 reports), Download CSV, Print / Export PDF | `GET /admin/reports/*` |
 | Audit Log *(admin only)* | Filter + Search (read-only) | `GET /admin/audit-logs` |
+| Inventory | Low-stock / expiring banners, Stock in, Stock out, expand row for batches, **Add/Edit/Archive medicine, Dispose expired, History** | `GET /medicines`, `POST /inventory/stock-in`, `POST /inventory/stock-out`, `GET /inventory/expiring-soon`, `POST/PATCH /admin/medicines`, `GET /admin/inventory/expired`, `POST /admin/inventory/batches/{id}/dispose` |
+| Inventory History *(admin only)* | Filter by date/medicine/type, Download CSV | `GET /admin/inventory/history` |
 | API-only, no UI yet | Queue history by date | `GET /queue/{date}/history` (admin only) |
 
 ### PERSONNEL (web) — ✅ confirmed
-Everything in the Admin table **except** Clinic Settings, Reports, Audit Log, and queue history. Personnel can: Call Next, Register walk-in, Mark Done, Mark Skipped, Save visit record, Mark No-show, search Visit Records, view Analytics, open TV Board.
+Everything in the Admin table **except** Clinic Settings, Reports, Audit Log, queue history, medicine catalog edits, expired-batch disposal, and Inventory History. Personnel can: Call Next, Register walk-in, Mark Done, Mark Skipped, Save visit record (incl. medicines given, which deducts stock), Mark No-show, search Visit Records, view Analytics, open TV Board, view Inventory, Stock in, Stock out.
 
 > Note: routes under `/admin/queue/*` and `/admin/visits/search` are personnel-accessible despite the prefix ([api.php:71-88](api/routes/api.php#L71-L88)). Naming only — behaviour is correct.
 

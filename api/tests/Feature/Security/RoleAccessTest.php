@@ -4,6 +4,8 @@ namespace Tests\Feature\Security;
 
 use App\Models\Appointment;
 use App\Models\EventDay;
+use App\Models\Medicine;
+use App\Models\MedicineBatch;
 use App\Models\QueueEntry;
 use App\Models\User;
 use App\Models\VisitRecord;
@@ -78,6 +80,18 @@ class RoleAccessTest extends TestCase
             'reports visit-summary' => ['GET', '/api/admin/reports/visit-summary', ['admin']],
             'reports no-show-summary' => ['GET', '/api/admin/reports/no-show-summary', ['admin']],
             'reports peak-hours-by-weekday' => ['GET', '/api/admin/reports/peak-hours-by-weekday', ['admin']],
+
+            // Phase 6 — inventory
+            'medicines index' => ['GET', '/api/medicines', self::STAFF],
+            'medicines store' => ['POST', '/api/admin/medicines', ['admin']],
+            'medicines update' => ['PATCH', '/api/admin/medicines/{medicine}', ['admin']],
+            'inventory stock-in' => ['POST', '/api/inventory/stock-in', self::STAFF],
+            'inventory stock-out' => ['POST', '/api/inventory/stock-out', self::STAFF],
+            'inventory low-stock' => ['GET', '/api/inventory/low-stock', self::STAFF],
+            'inventory expiring-soon' => ['GET', '/api/inventory/expiring-soon', self::STAFF],
+            'inventory expired' => ['GET', '/api/admin/inventory/expired', ['admin']],
+            'inventory dispose' => ['POST', '/api/admin/inventory/batches/{batch}/dispose', ['admin']],
+            'inventory history' => ['GET', '/api/admin/inventory/history', ['admin']],
         ];
     }
 
@@ -131,6 +145,14 @@ class RoleAccessTest extends TestCase
             $id = EventDay::create(['date' => today()->addDays(rand(1, 3000)), 'label' => 'x'])->id;
 
             return str_replace('{eventDay}', (string) $id, $uri);
+        }
+
+        if (str_contains($uri, '{medicine}')) {
+            return str_replace('{medicine}', (string) Medicine::factory()->create()->id, $uri);
+        }
+
+        if (str_contains($uri, '{batch}')) {
+            return str_replace('{batch}', (string) MedicineBatch::factory()->expired()->create()->id, $uri);
         }
 
         if (str_contains($uri, '{appointment}')) {

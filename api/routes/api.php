@@ -4,6 +4,8 @@ use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\InventoryController;
+use App\Http\Controllers\Api\MedicineController;
 use App\Http\Controllers\Api\QueueController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ScheduleController;
@@ -93,6 +95,24 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::get('/visits/{queueEntry}', [VisitController::class, 'show']);
+
+    // Phase 6 — inventory. Catalog edits, expired write-offs and the full
+    // log are admin; receiving and dispensing stock is the nurse's job.
+    Route::middleware('role:admin,personnel')->group(function () {
+        Route::get('/medicines', [MedicineController::class, 'index']);
+        Route::post('/inventory/stock-in', [InventoryController::class, 'stockIn']);
+        Route::post('/inventory/stock-out', [InventoryController::class, 'stockOut']);
+        Route::get('/inventory/low-stock', [InventoryController::class, 'lowStock']);
+        Route::get('/inventory/expiring-soon', [InventoryController::class, 'expiringSoon']);
+    });
+
+    Route::middleware('role:admin')->prefix('admin')->group(function () {
+        Route::post('/medicines', [MedicineController::class, 'store']);
+        Route::patch('/medicines/{medicine}', [MedicineController::class, 'update']);
+        Route::get('/inventory/expired', [InventoryController::class, 'expired']);
+        Route::post('/inventory/batches/{batch}/dispose', [InventoryController::class, 'disposeBatch']);
+        Route::get('/inventory/history', [InventoryController::class, 'history']);
+    });
 
     Route::middleware('role:admin,personnel')->prefix('analytics')->group(function () {
         Route::get('/dashboard', [AnalyticsController::class, 'dashboard']);

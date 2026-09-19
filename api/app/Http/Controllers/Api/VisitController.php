@@ -3,16 +3,24 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Medicine;
 use App\Models\QueueEntry;
 use App\Models\VisitRecord;
 use App\Services\AuditLogger;
+use App\Services\InventoryService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class VisitController extends Controller
 {
     /**
      * Create the visit record for a queue entry, personnel/admin only.
      * One record per queue entry (enforced by a unique constraint).
+     *
+     * Medicines dispensed during the visit ride along and are stocked out
+     * FIFO in the same transaction, so a short shelf rejects the whole save
+     * rather than leaving a record that claims meds were given.
      */
     public function store(Request $request)
     {
@@ -26,15 +34,35 @@ class VisitController extends Controller
             'diagnosis' => ['required', 'string'],
             'treatment' => ['nullable', 'string'],
             'referred_to' => ['nullable', 'string', 'max:255'],
+            'medicines' => ['nullable', 'array'],
+            'medicines.*.medicine_id' => ['required', 'integer', 'distinct', Rule::exists('medicines', 'id')->where('is_active', true)],
+            'medicines.*.quantity' => ['required', 'integer', 'min:1'],
         ]);
 
         $queueEntry = QueueEntry::findOrFail($validated['queue_entry_id']);
+        $dispensed = $validated['medicines'] ?? [];
+        unset($validated['medicines']);
 
-        $visit = VisitRecord::create([
-            ...$validated,
-            'patient_id' => $queueEntry->patient_id,
-            'created_by_id' => $request->user()->id,
-        ]);
+        $visit = DB::transaction(function () use ($validated, $queueEntry, $dispensed, $request) {
+            $visit = VisitRecord::create([
+                ...$validated,
+                'patient_id' => $queueEntry->patient_id,
+                'created_by_id' => $request->user()->id,
+            ]);
+
+            $inventory = app(InventoryService::class);
+            foreach ($dispensed as $item) {
+                $inventory->stockOut(
+                    Medicine::findOrFail($item['medicine_id']),
+                    $item['quantity'],
+                    $request->user()->id,
+                    $visit,
+                    'Dispensed during visit',
+                );
+            }
+
+            return $visit;
+        });
 
         app(AuditLogger::class)->log($request->user()->id, 'visit.created', $visit, [
             'queue_entry_id' => $visit->queue_entry_id,
@@ -122,7 +150,18 @@ class VisitController extends Controller
      */
     private function formatVisit(VisitRecord $visit): array
     {
-        $visit->loadMissing('patient:id,name,school_id', 'createdBy:id,name');
+        $visit->loadMissing('patient:id,name,school_id', 'createdBy:id,name', 'inventoryLogs.medicine:id,name,unit');
+
+        // A dispense can span two batches (two log rows); show it once.
+        $medicines = $visit->inventoryLogs
+            ->groupBy('medicine_id')
+            ->map(fn ($logs) => [
+                'id' => $logs->first()->medicine->id,
+                'name' => $logs->first()->medicine->name,
+                'unit' => $logs->first()->medicine->unit,
+                'quantity' => (int) $logs->sum('quantity'),
+            ])
+            ->values();
 
         return [
             'id' => $visit->id,
@@ -144,6 +183,7 @@ class VisitController extends Controller
             'diagnosis' => $visit->diagnosis,
             'treatment' => $visit->treatment,
             'referred_to' => $visit->referred_to,
+            'medicines' => $medicines,
         ];
     }
 }

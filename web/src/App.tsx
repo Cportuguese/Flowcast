@@ -5,6 +5,8 @@ import { AnalyticsDashboard } from './pages/AnalyticsDashboard'
 import { Appointments } from './pages/Appointments'
 import { AuditLog } from './pages/AuditLog'
 import { Dashboard } from './pages/Dashboard'
+import { Inventory } from './pages/Inventory'
+import { InventoryHistory } from './pages/InventoryHistory'
 import { Login } from './pages/Login'
 import { QueueBoard } from './pages/QueueBoard'
 import { Reports } from './pages/Reports'
@@ -69,6 +71,22 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={['admin']}>
             <Reports />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/inventory"
+        element={
+          <ProtectedRoute allowedRoles={['admin', 'personnel']}>
+            <Inventory />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/inventory/history"
+        element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <InventoryHistory />
           </ProtectedRoute>
         }
       />

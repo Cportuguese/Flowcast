@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'queue_entry_id',
@@ -44,5 +45,13 @@ class VisitRecord extends Model
     public function queueEntry(): BelongsTo
     {
         return $this->belongsTo(QueueEntry::class);
+    }
+
+    /**
+     * Stock-out rows for medicines dispensed during this visit.
+     */
+    public function inventoryLogs(): HasMany
+    {
+        return $this->hasMany(InventoryLog::class);
     }
 }
