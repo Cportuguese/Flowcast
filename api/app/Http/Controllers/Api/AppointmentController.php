@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Models\ClinicSchedule;
 use App\Models\EventDay;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -102,6 +103,11 @@ class AppointmentController extends Controller
             return response()->json(['message' => 'This slot is fully booked.'], 409);
         }
 
+        app(AuditLogger::class)->log($request->user()->id, 'appointment.booked', $appointment, [
+            'scheduled_at' => $scheduledAt->toIso8601String(),
+            'reason' => $validated['reason'],
+        ]);
+
         return response()->json($appointment, 201);
     }
 
@@ -138,6 +144,10 @@ class AppointmentController extends Controller
             'cancel_reason' => $validated['cancel_reason'] ?? null,
         ]);
 
+        app(AuditLogger::class)->log($request->user()->id, 'appointment.cancelled', $appointment, [
+            'cancel_reason' => $validated['cancel_reason'] ?? null,
+        ]);
+
         return response()->json($appointment);
     }
 
@@ -161,13 +171,17 @@ class AppointmentController extends Controller
         return response()->json($query->get());
     }
 
-    public function markNoShow(Appointment $appointment)
+    public function markNoShow(Request $request, Appointment $appointment)
     {
         if (! in_array($appointment->status, ['booked', 'checked_in'], true)) {
             return response()->json(['message' => 'This appointment cannot be marked as a no-show.'], 422);
         }
 
         $appointment->update(['status' => 'no_show']);
+
+        app(AuditLogger::class)->log($request->user()->id, 'appointment.no_show', $appointment, [
+            'scheduled_at' => $appointment->scheduled_at->toIso8601String(),
+        ]);
 
         return response()->json($appointment);
     }

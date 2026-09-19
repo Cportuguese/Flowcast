@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { api, clearToken, getToken, setToken } from '../lib/api'
+import { api, clearToken, getToken, onUnauthorized, setToken } from '../lib/api'
+import { disconnectEcho } from '../lib/echo'
 
 interface User {
   id: number
@@ -22,6 +23,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
+  // A 401 anywhere means the token is dead (expired or revoked): drop the
+  // session locally so ProtectedRoute bounces to /login instead of leaving a
+  // "signed in" UI whose every click fails.
+  useEffect(() => {
+    onUnauthorized(() => {
+      disconnectEcho()
+      setUser(null)
+    })
+  }, [])
+
   useEffect(() => {
     if (!getToken()) {
       setIsLoading(false)
@@ -39,7 +50,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await api.post<{ user: User; token: string }>('/login', {
       email,
       password,
+      device: 'web',
     })
+    // The Echo singleton bakes the bearer token in at construction, so tear
+    // down any instance built under a previous (or absent) token.
+    disconnectEcho()
     setToken(response.data.token)
     setUser(response.data.user)
   }
@@ -48,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await api.post('/logout')
     } finally {
+      disconnectEcho()
       clearToken()
       setUser(null)
     }

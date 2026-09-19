@@ -1,8 +1,11 @@
 <?php
 
+use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AppointmentController;
+use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\QueueController;
+use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ScheduleController;
 use App\Http\Controllers\Api\VisitController;
 use Illuminate\Support\Facades\Route;
@@ -34,6 +37,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/event-days', [ScheduleController::class, 'eventDays']);
         Route::post('/event-days', [ScheduleController::class, 'storeEventDay']);
         Route::delete('/event-days/{eventDay}', [ScheduleController::class, 'destroyEventDay']);
+
+        Route::get('/audit-logs', [AuditLogController::class, 'index']);
+
+        Route::prefix('reports')->group(function () {
+            Route::get('/queue-summary', [ReportController::class, 'queueSummary']);
+            Route::get('/visit-summary', [ReportController::class, 'visitSummary']);
+            Route::get('/no-show-summary', [ReportController::class, 'noShowSummary']);
+            Route::get('/peak-hours-by-weekday', [ReportController::class, 'peakHoursByWeekday']);
+        });
     });
 
     Route::get('/schedule', [ScheduleController::class, 'active']);
@@ -81,4 +93,11 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::get('/visits/{queueEntry}', [VisitController::class, 'show']);
+
+    Route::middleware('role:admin,personnel')->prefix('analytics')->group(function () {
+        Route::get('/dashboard', [AnalyticsController::class, 'dashboard']);
+        Route::get('/volume-forecast', [AnalyticsController::class, 'volumeForecast']);
+        Route::get('/wait-time-forecast', [AnalyticsController::class, 'waitTimeForecast']);
+        Route::get('/peak-hours', [AnalyticsController::class, 'peakHours']);
+    });
 });

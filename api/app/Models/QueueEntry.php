@@ -3,12 +3,15 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable(['queue_number', 'queue_date', 'patient_id', 'source', 'status', 'appointment_id', 'handled_by_id', 'joined_at', 'called_at', 'near_call_notified_at', 'completed_at'])]
 class QueueEntry extends Model
 {
+    use HasFactory;
+
     protected function casts(): array
     {
         return [

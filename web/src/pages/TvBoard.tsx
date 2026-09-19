@@ -68,7 +68,7 @@ export function TvBoard() {
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-slate-950 px-8 py-12 text-white">
-      <p className="text-lg uppercase tracking-[0.3em] text-slate-400">Flowcast Clinic</p>
+      <p className="text-lg uppercase tracking-[0.3em] text-slate-400">Flowcast</p>
 
       <div className="mt-10 flex flex-col items-center">
         <p className="text-2xl uppercase tracking-widest text-slate-400">Now Serving</p>

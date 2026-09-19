@@ -1,6 +1,11 @@
 import Echo from 'laravel-echo';
-import Pusher from 'pusher-js/react-native';
+import PusherModule from 'pusher-js/react-native';
 import { getToken } from './api';
+
+// pusher-js's react-native type declarations describe a default export,
+// but its actual bundled runtime for React Native only exposes a named
+// `Pusher` property (no default) — this bridges that mismatch.
+const Pusher = (PusherModule as unknown as { Pusher: typeof PusherModule }).Pusher;
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://127.0.0.1:8000/api';
 const authEndpoint = `${apiUrl.replace(/\/api\/?$/, '')}/broadcasting/auth`;

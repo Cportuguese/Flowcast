@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Models\QueueEntry;
 use App\Models\User;
+use App\Services\AuditLogger;
 use App\Services\ExpoPushNotifier;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\QueryException;
@@ -28,7 +29,13 @@ class QueueController extends Controller
         $isStaff = in_array($user->role, ['admin', 'personnel'], true);
 
         $validated = $request->validate([
-            'patient_id' => [$isStaff ? 'required' : 'prohibited', 'integer', 'exists:users,id'],
+            // Only patient accounts belong in the queue — staff checking in
+            // another staff member's ID is always a mistake.
+            'patient_id' => [
+                $isStaff ? 'required' : 'prohibited',
+                'integer',
+                Rule::exists('users', 'id')->where('role', 'patient'),
+            ],
             'appointment_id' => ['nullable', 'integer', 'exists:appointments,id'],
         ]);
 
@@ -79,18 +86,25 @@ class QueueController extends Controller
             'patient_type' => ['nullable', Rule::in(['student', 'faculty', 'staff'])],
         ]);
 
-        $patient = User::create([
+        $patient = new User([
             'name' => $validated['name'],
             'email' => 'walkin_'.Str::uuid()->toString().'@flowcast.local',
             'password' => Hash::make(Str::random(32)),
-            'role' => 'patient',
             'contact_no' => $validated['contact_no'] ?? null,
             'patient_type' => $validated['patient_type'] ?? null,
         ]);
+        // `role` is deliberately not mass-assignable; set it explicitly.
+        $patient->role = 'patient';
+        $patient->save();
 
         $today = Carbon::today();
 
         $entry = $this->assignQueueEntry($patient->id, null, $today);
+
+        app(AuditLogger::class)->log($request->user()->id, 'queue.walk_in', $entry, [
+            'name' => $validated['name'],
+            'queue_number' => $entry->queue_number,
+        ]);
 
         $this->broadcastQueue($today);
 
@@ -154,14 +168,19 @@ class QueueController extends Controller
             ['queue_entry_id' => $entry->id],
         );
 
-        broadcast(new TicketCalled($today->toDateString(), $entry->queue_number, $entry->patient_id));
+        $this->safeBroadcast(new TicketCalled($today->toDateString(), $entry->queue_number, $entry->patient_id));
+
+        app(AuditLogger::class)->log($request->user()->id, 'queue.called', $entry, [
+            'queue_number' => $entry->queue_number,
+            'patient_id' => $entry->patient_id,
+        ]);
 
         $this->broadcastQueue($today);
 
         return response()->json($this->formatEntry($entry->fresh()));
     }
 
-    public function complete(QueueEntry $queueEntry)
+    public function complete(Request $request, QueueEntry $queueEntry)
     {
         if (in_array($queueEntry->status, ['done', 'skipped'], true)) {
             return response()->json(['message' => 'This queue entry has already been resolved.'], 422);
@@ -172,12 +191,16 @@ class QueueController extends Controller
             'completed_at' => now(),
         ]);
 
+        app(AuditLogger::class)->log($request->user()->id, 'queue.completed', $queueEntry, [
+            'queue_number' => $queueEntry->queue_number,
+        ]);
+
         $this->broadcastQueue($queueEntry->queue_date);
 
         return response()->json($this->formatEntry($queueEntry));
     }
 
-    public function skip(QueueEntry $queueEntry)
+    public function skip(Request $request, QueueEntry $queueEntry)
     {
         if (in_array($queueEntry->status, ['done', 'skipped'], true)) {
             return response()->json(['message' => 'This queue entry has already been resolved.'], 422);
@@ -185,6 +208,10 @@ class QueueController extends Controller
 
         $queueEntry->update([
             'status' => 'skipped',
+        ]);
+
+        app(AuditLogger::class)->log($request->user()->id, 'queue.skipped', $queueEntry, [
+            'queue_number' => $queueEntry->queue_number,
         ]);
 
         $this->broadcastQueue($queueEntry->queue_date);
@@ -326,12 +353,12 @@ class QueueController extends Controller
     {
         $entries = $this->entriesFor($date);
 
-        broadcast(new QueueUpdated(
+        $this->safeBroadcast(new QueueUpdated(
             $date->toDateString(),
             $entries->map(fn (QueueEntry $entry) => $this->formatEntry($entry))->values()->all(),
         ));
 
-        broadcast(new QueueBoardUpdated(
+        $this->safeBroadcast(new QueueBoardUpdated(
             $date->toDateString(),
             $entries->map(fn (QueueEntry $entry) => [
                 'queue_number' => $entry->queue_number,
@@ -344,7 +371,7 @@ class QueueController extends Controller
         foreach ($entries as $entry) {
             $isWaiting = $entry->status === 'waiting';
 
-            broadcast(new QueueEntryUpdated($entry->patient_id, [
+            $this->safeBroadcast(new QueueEntryUpdated($entry->patient_id, [
                 'date' => $date->toDateString(),
                 'entry' => $this->formatEntry($entry),
                 'position' => $isWaiting ? $peopleAhead + 1 : null,
@@ -365,6 +392,19 @@ class QueueController extends Controller
 
                 $peopleAhead++;
             }
+        }
+    }
+
+    /**
+     * Realtime updates are best-effort: a down Reverb server must never
+     * fail the check-in/call/complete request that already hit the database.
+     */
+    private function safeBroadcast(object $event): void
+    {
+        try {
+            broadcast($event);
+        } catch (\Throwable $e) {
+            report($e);
         }
     }
 }

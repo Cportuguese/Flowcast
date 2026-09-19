@@ -18,6 +18,32 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// Registered by AuthProvider so an expired/revoked token clears React state
+// as well as SecureStore. Skips the auth routes themselves: a 401 there is
+// either a bad attempt or an already-dead token, and the caller handles both.
+let unauthorizedHandler: (() => void) | null = null;
+
+export function onUnauthorized(handler: () => void) {
+  unauthorizedHandler = handler;
+}
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error: unknown) => {
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      const url = error.config?.url ?? '';
+      const isAuthRoute = /\/(login|logout|register)$/.test(url);
+
+      if (!isAuthRoute && (await SecureStore.getItemAsync(TOKEN_KEY))) {
+        await clearToken().catch(() => {});
+        unauthorizedHandler?.();
+      }
+    }
+
+    return Promise.reject(error);
+  },
+);
+
 export function getToken() {
   return SecureStore.getItemAsync(TOKEN_KEY);
 }

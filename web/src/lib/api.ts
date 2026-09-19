@@ -17,6 +17,32 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// Registered by AuthProvider so an expired/revoked token clears React state
+// as well as storage. Skips /login and /logout: a 401 there is either a bad
+// attempt or an already-dead token, and the caller handles both itself.
+let unauthorizedHandler: (() => void) | null = null
+
+export function onUnauthorized(handler: () => void) {
+  unauthorizedHandler = handler
+}
+
+api.interceptors.response.use(
+  (response) => response,
+  (error: unknown) => {
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      const url = error.config?.url ?? ''
+      const isAuthRoute = /\/(login|logout|register)$/.test(url)
+
+      if (!isAuthRoute && localStorage.getItem(TOKEN_KEY)) {
+        clearToken()
+        unauthorizedHandler?.()
+      }
+    }
+
+    return Promise.reject(error)
+  },
+)
+
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY)
 }

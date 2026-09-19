@@ -61,6 +61,13 @@ export function Dashboard() {
             >
               Open TV Board ↗
             </a>
+            <button
+              type="button"
+              onClick={() => navigate('/analytics')}
+              className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+            >
+              Analytics
+            </button>
             {isAdmin && (
               <button
                 type="button"
@@ -68,6 +75,24 @@ export function Dashboard() {
                 className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
               >
                 Clinic Settings
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => navigate('/admin/reports')}
+                className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+              >
+                Reports
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => navigate('/admin/audit-log')}
+                className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+              >
+                Audit Log
               </button>
             )}
           </div>

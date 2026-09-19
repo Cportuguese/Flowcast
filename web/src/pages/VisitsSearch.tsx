@@ -65,13 +65,22 @@ export function VisitsSearch() {
       <div className="mx-auto max-w-4xl">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold text-gray-900">Visit Records</h1>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="rounded bg-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-300"
-          >
-            Log out
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard')}
+              className="rounded bg-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-300"
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded bg-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-300"
+            >
+              Log out
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleSearch} className="mt-6 flex flex-wrap items-end gap-3">
@@ -132,7 +141,12 @@ export function VisitsSearch() {
                       onClick={() => setExpandedId(expandedId === visit.id ? null : visit.id)}
                       className="cursor-pointer hover:bg-slate-50"
                     >
-                      <td className="px-4 py-3 text-slate-500">{new Date(visit.date).toLocaleDateString()}</td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <div className="text-slate-700">{new Date(visit.date).toLocaleDateString()}</div>
+                        <div className="text-xs text-slate-400">
+                          {new Date(visit.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 font-medium text-slate-900">{visit.patient.name}</td>
                       <td className="px-4 py-3 text-slate-600">{visit.complaint}</td>
                       <td className="px-4 py-3 text-slate-600">{visit.diagnosis}</td>

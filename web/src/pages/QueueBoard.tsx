@@ -187,13 +187,22 @@ export function QueueBoard() {
               {date ?? '—'} · Signed in as {user?.name} ({user?.role})
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="rounded bg-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-300"
-          >
-            Log out
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard')}
+              className="rounded bg-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-300"
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded bg-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-300"
+            >
+              Log out
+            </button>
+          </div>
         </div>
 
         {actionError && (

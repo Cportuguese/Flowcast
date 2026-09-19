@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { api, clearToken, getToken, setToken } from '../lib/api';
+import { api, clearToken, getToken, onUnauthorized, setToken } from '../lib/api';
+import { disconnectEcho } from '../lib/echo';
 
 interface User {
   id: number;
@@ -28,6 +29,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // A 401 anywhere means the token is dead (expired or revoked): drop the
+  // session locally so the root layout's guard sends the user to /login.
+  useEffect(() => {
+    onUnauthorized(() => {
+      disconnectEcho();
+      setUser(null);
+    });
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
@@ -50,7 +60,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await api.post<{ user: User; token: string }>('/login', {
       email,
       password,
+      device: 'mobile',
     });
+    // The Echo singleton bakes the bearer token in at construction, so tear
+    // down any instance built under a previous (or absent) token.
+    disconnectEcho();
     await setToken(response.data.token);
     setUser(response.data.user);
   }
@@ -61,7 +75,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string;
     password_confirmation: string;
   }) {
-    const response = await api.post<{ user: User; token: string }>('/register', params);
+    const response = await api.post<{ user: User; token: string }>('/register', {
+      ...params,
+      device: 'mobile',
+    });
+    disconnectEcho();
     await setToken(response.data.token);
     setUser(response.data.user);
   }
@@ -70,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await api.post('/logout');
     } finally {
+      disconnectEcho();
       await clearToken();
       setUser(null);
     }

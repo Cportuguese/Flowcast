@@ -9,6 +9,21 @@ interface Props {
   onSaved: () => void
 }
 
+const COMMON_COMPLAINTS = [
+  'Headache',
+  'Fever',
+  'Cough/Colds',
+  'Stomach ache',
+  'Dizziness',
+  'Nausea/Vomiting',
+  'Menstrual cramps',
+  'Minor cut/wound',
+  'Sprain/Muscle pain',
+  'Allergic reaction',
+  'Toothache',
+  'Anxiety/Panic',
+]
+
 export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: Props) {
   const [complaint, setComplaint] = useState('')
   const [bloodPressure, setBloodPressure] = useState('')
@@ -20,6 +35,25 @@ export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: 
   const [referredTo, setReferredTo] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+
+  function toggleComplaint(label: string) {
+    const tokens = complaint
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean)
+
+    const exists = tokens.some((t) => t.toLowerCase() === label.toLowerCase())
+    const next = exists ? tokens.filter((t) => t.toLowerCase() !== label.toLowerCase()) : [...tokens, label]
+
+    setComplaint(next.join(', '))
+  }
+
+  function isSelected(label: string) {
+    return complaint
+      .split(',')
+      .map((t) => t.trim().toLowerCase())
+      .includes(label.toLowerCase())
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -64,10 +98,27 @@ export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-700">Complaint</label>
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {COMMON_COMPLAINTS.map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => toggleComplaint(label)}
+                  className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+                    isSelected(label)
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : 'border-slate-300 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <textarea
               required
               value={complaint}
               onChange={(e) => setComplaint(e.target.value)}
+              placeholder="Tap a common complaint above, or type here"
               rows={2}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />

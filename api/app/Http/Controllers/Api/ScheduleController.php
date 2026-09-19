@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ClinicSchedule;
 use App\Models\EventDay;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 
 class ScheduleController extends Controller
@@ -49,6 +50,13 @@ class ScheduleController extends Controller
             ]
         );
 
+        app(AuditLogger::class)->log($request->user()->id, 'schedule.updated', $schedule, [
+            'day_of_week' => $validated['day_of_week'],
+            'start_time' => $validated['start_time'],
+            'end_time' => $validated['end_time'],
+            'capacity' => $validated['capacity'],
+        ]);
+
         return response()->json($schedule, 200);
     }
 
@@ -69,12 +77,22 @@ class ScheduleController extends Controller
 
         $eventDay = EventDay::create($validated);
 
+        app(AuditLogger::class)->log($request->user()->id, 'event_day.created', $eventDay, [
+            'date' => $validated['date'],
+            'label' => $validated['label'],
+        ]);
+
         return response()->json($eventDay, 201);
     }
 
-    public function destroyEventDay(EventDay $eventDay)
+    public function destroyEventDay(Request $request, EventDay $eventDay)
     {
         $eventDay->delete();
+
+        app(AuditLogger::class)->log($request->user()->id, 'event_day.deleted', $eventDay, [
+            'date' => $eventDay->date->toDateString(),
+            'label' => $eventDay->label,
+        ]);
 
         return response()->json(['message' => 'Event day removed.']);
     }

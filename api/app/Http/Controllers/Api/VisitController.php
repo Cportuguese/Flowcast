@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\QueueEntry;
 use App\Models\VisitRecord;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 
 class VisitController extends Controller
@@ -33,6 +34,11 @@ class VisitController extends Controller
             ...$validated,
             'patient_id' => $queueEntry->patient_id,
             'created_by_id' => $request->user()->id,
+        ]);
+
+        app(AuditLogger::class)->log($request->user()->id, 'visit.created', $visit, [
+            'queue_entry_id' => $visit->queue_entry_id,
+            'diagnosis' => $visit->diagnosis,
         ]);
 
         return response()->json($this->formatVisit($visit), 201);
