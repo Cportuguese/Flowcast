@@ -300,8 +300,8 @@ All ✅/✗ in the non-italic rows are **already enforced today** at both API an
 
 ## Implementation order (for a future session — NOT this one)
 
-1. ~~`AppShell` + `PageHeader`~~ — done (commit d252b25). `StatTile`, `StatusPill`, `Button` still to extract as the Home pages need them.
-2. Split `Dashboard.tsx` into `StaffHome` (role-switched Personnel/Admin layout) + `PatientWebNotice`.
+1. ~~`AppShell` + `PageHeader`~~ — done (commit d252b25). `StatTile` extracted with step 2; `StatusPill` / `Button` still inline.
+2. ~~Split `Dashboard.tsx` into role-switched homes~~ — done: [PersonnelHome.tsx](web/src/pages/home/PersonnelHome.tsx), [AdminHome.tsx](web/src/pages/home/AdminHome.tsx), shared [useTodayQueue.ts](web/src/lib/useTodayQueue.ts) + [StatTile.tsx](web/src/components/StatTile.tsx). "Register walk-in" on Home opens `/queue?walkin=1`.
 3. ~~Small `QueueHistory` page for admin~~ — done with the Part 1 gap fixes.
 4. Mobile: `app/(tabs)/` group with `index` (home), `appointments`, `visits`; move Log out to header; send `patient_type`/`contact_no` on register.
 5. TV board: clock, connection dot, closed state.

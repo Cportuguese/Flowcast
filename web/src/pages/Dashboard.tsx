@@ -1,19 +1,14 @@
-import { PageHeader } from '../components/PageHeader'
 import { PatientWebNotice } from '../components/PatientWebNotice'
 import { useAuth } from '../context/AuthContext'
+import { AdminHome } from './home/AdminHome'
+import { PersonnelHome } from './home/PersonnelHome'
 
-// Placeholder until the role-specific Home (Personnel "Today" / Admin "Overview")
-// lands. Navigation now lives in the sidebar (AppShell).
+// One route, three homes: oversight for admin, queue-first for personnel,
+// and a pointer to the mobile app for patients.
 export function Dashboard() {
   const { user } = useAuth()
 
-  if (user?.role === 'patient') {
-    return <PatientWebNotice />
-  }
-
-  return (
-    <div className="mx-auto max-w-5xl">
-      <PageHeader title="Home" subtitle={`Welcome, ${user?.name}`} />
-    </div>
-  )
+  if (user?.role === 'admin') return <AdminHome />
+  if (user?.role === 'personnel') return <PersonnelHome />
+  return <PatientWebNotice />
 }

@@ -1,119 +1,41 @@
-import axios from 'axios'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { VisitFormModal } from '../components/VisitFormModal'
-import { getEcho } from '../lib/echo'
 import { api } from '../lib/api'
+import { extractErrorMessage } from '../lib/errors'
 import {
   QUEUE_STATUS_LABELS,
   QUEUE_STATUS_STYLES,
   type QueueEntry,
 } from '../lib/queue'
+import { timeInQueue, useTodayQueue } from '../lib/useTodayQueue'
 import { PageHeader } from '../components/PageHeader'
 
 export function QueueBoard() {
-  const [date, setDate] = useState<string | null>(null)
-  const [entries, setEntries] = useState<QueueEntry[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [isCallingNext, setIsCallingNext] = useState(false)
-  const [busyEntryId, setBusyEntryId] = useState<number | null>(null)
+  const {
+    date,
+    entries,
+    waiting,
+    inConsultation,
+    isLoading,
+    actionError,
+    setActionError,
+    isCallingNext,
+    busyEntryId,
+    callNext,
+    complete,
+    skip,
+  } = useTodayQueue()
+  const [searchParams] = useSearchParams()
 
   const [statusFilter, setStatusFilter] = useState<'all' | QueueEntry['status']>('all')
   const [visitFormEntry, setVisitFormEntry] = useState<QueueEntry | null>(null)
 
-  const [showWalkInForm, setShowWalkInForm] = useState(false)
+  const [showWalkInForm, setShowWalkInForm] = useState(() => searchParams.get('walkin') === '1')
   const [walkInName, setWalkInName] = useState('')
   const [walkInContact, setWalkInContact] = useState('')
   const [walkInType, setWalkInType] = useState<'' | 'student' | 'faculty' | 'staff'>('')
   const [isSubmittingWalkIn, setIsSubmittingWalkIn] = useState(false)
-
-  const channelDateRef = useRef<string | null>(null)
-
-  const [, setTick] = useState(0)
-  useEffect(() => {
-    const interval = setInterval(() => setTick((t) => t + 1), 30_000)
-    return () => clearInterval(interval)
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-
-    api
-      .get<{ date: string; entries: QueueEntry[] }>('/queue/today')
-      .then((response) => {
-        if (cancelled) return
-        setDate(response.data.date)
-        setEntries(response.data.entries)
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!date || channelDateRef.current === date) return
-
-    const echo = getEcho()
-    const channelName = `queue.${date}.staff`
-    channelDateRef.current = date
-
-    echo.private(channelName).listen('.queue.updated', (payload: { date: string; entries: QueueEntry[] }) => {
-      setEntries(payload.entries)
-    })
-
-    return () => {
-      echo.leave(`private-${channelName}`)
-    }
-  }, [date])
-
-  function extractErrorMessage(err: unknown, fallback: string) {
-    if (axios.isAxiosError(err) && err.response) {
-      const data = err.response.data as { message?: string }
-      return data.message ?? fallback
-    }
-    return fallback
-  }
-
-  async function handleCallNext() {
-    setActionError(null)
-    setIsCallingNext(true)
-    try {
-      await api.post('/admin/queue/call-next')
-    } catch (err) {
-      setActionError(extractErrorMessage(err, 'Unable to call the next patient.'))
-    } finally {
-      setIsCallingNext(false)
-    }
-  }
-
-  async function handleComplete(entry: QueueEntry) {
-    setActionError(null)
-    setBusyEntryId(entry.id)
-    try {
-      await api.patch(`/admin/queue/${entry.id}/complete`)
-      setVisitFormEntry(entry)
-    } catch (err) {
-      setActionError(extractErrorMessage(err, 'Unable to mark this entry as done.'))
-    } finally {
-      setBusyEntryId(null)
-    }
-  }
-
-  async function handleSkip(id: number) {
-    setActionError(null)
-    setBusyEntryId(id)
-    try {
-      await api.patch(`/admin/queue/${id}/skip`)
-    } catch (err) {
-      setActionError(extractErrorMessage(err, 'Unable to skip this entry.'))
-    } finally {
-      setBusyEntryId(null)
-    }
-  }
 
   async function handleWalkInSubmit(event: FormEvent) {
     event.preventDefault()
@@ -137,16 +59,7 @@ export function QueueBoard() {
     }
   }
 
-  const waitingCount = entries.filter((e) => e.status === 'waiting').length
-  const inConsultation = entries.filter((e) => e.status === 'in_consultation')
   const visibleEntries = statusFilter === 'all' ? entries : entries.filter((e) => e.status === statusFilter)
-
-  function timeInQueue(entry: QueueEntry) {
-    if (!entry.joined_at) return '—'
-    const end = entry.completed_at ? new Date(entry.completed_at) : new Date()
-    const minutes = Math.max(0, Math.round((end.getTime() - new Date(entry.joined_at).getTime()) / 60_000))
-    return `${minutes} min`
-  }
 
   return (
     <>
@@ -160,11 +73,11 @@ export function QueueBoard() {
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <button
             type="button"
-            onClick={handleCallNext}
-            disabled={isCallingNext || waitingCount === 0}
+            onClick={callNext}
+            disabled={isCallingNext || waiting.length === 0}
             className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
           >
-            {isCallingNext ? 'Calling…' : `Call Next (${waitingCount} waiting)`}
+            {isCallingNext ? 'Calling…' : `Call Next (${waiting.length} waiting)`}
           </button>
           <button
             type="button"
@@ -310,7 +223,7 @@ export function QueueBoard() {
                         <button
                           type="button"
                           disabled={busyEntryId === entry.id}
-                          onClick={() => handleComplete(entry)}
+                          onClick={() => complete(entry).then((ok) => ok && setVisitFormEntry(entry))}
                           className="rounded bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
                         >
                           Mark Done
@@ -318,7 +231,7 @@ export function QueueBoard() {
                         <button
                           type="button"
                           disabled={busyEntryId === entry.id}
-                          onClick={() => handleSkip(entry.id)}
+                          onClick={() => skip(entry.id)}
                           className="rounded bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-200 disabled:opacity-50"
                         >
                           Mark Skipped
@@ -329,7 +242,7 @@ export function QueueBoard() {
                       <button
                         type="button"
                         disabled={busyEntryId === entry.id}
-                        onClick={() => handleSkip(entry.id)}
+                        onClick={() => skip(entry.id)}
                         className="rounded bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-200 disabled:opacity-50"
                       >
                         Mark Skipped

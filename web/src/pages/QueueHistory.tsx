@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { useCallback, useEffect, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
+import { StatTile } from '../components/StatTile'
 import { api } from '../lib/api'
 import {
   QUEUE_STATUS_LABELS,
@@ -73,10 +74,10 @@ export function QueueHistory() {
       {error && <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Stat label="Total" value={entries.length} />
-        <Stat label="Completed" value={done.length} />
-        <Stat label="Skipped" value={skipped} />
-        <Stat label="Avg wait" value={avgWait === null ? '—' : `${avgWait} min`} />
+        <StatTile label="Total" value={entries.length} />
+        <StatTile label="Completed" value={done.length} />
+        <StatTile label="Skipped" value={skipped} />
+        <StatTile label="Avg wait" value={avgWait === null ? '—' : `${avgWait} min`} />
       </div>
 
       <div className="mt-6 overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -142,11 +143,3 @@ export function QueueHistory() {
   )
 }
 
-function Stat({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-gray-900">{value}</p>
-    </div>
-  )
-}

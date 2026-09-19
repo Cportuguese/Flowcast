@@ -15,6 +15,7 @@ import {
 } from 'recharts'
 import { api } from '../lib/api'
 import { PageHeader } from '../components/PageHeader'
+import { StatTile } from '../components/StatTile'
 
 const COLOR_ACTUAL = '#2a78d6'
 const COLOR_FORECAST = '#eb6834'
@@ -285,11 +286,3 @@ export function AnalyticsDashboard() {
   )
 }
 
-function StatTile({ label, value }: { label: string; value: number | null }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-gray-900">{value ?? '—'}</p>
-    </div>
-  )
-}
