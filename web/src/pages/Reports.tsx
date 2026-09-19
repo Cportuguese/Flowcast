@@ -1,8 +1,7 @@
 import axios from 'axios'
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
+import { PageHeader } from '../components/PageHeader'
 
 interface QueueSummaryDay {
   date: string | null
@@ -75,45 +74,15 @@ function todayIso() {
 }
 
 export function Reports() {
-  const { user, logout } = useAuth()
-  const navigate = useNavigate()
-
-  async function handleLogout() {
-    await logout()
-    navigate('/login')
-  }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8 print:bg-white print:p-0">
-      <div className="mx-auto max-w-5xl">
-        <div className="flex items-center justify-between print:hidden">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Reports</h1>
-            <p className="text-sm text-slate-500">Signed in as {user?.name} ({user?.role})</p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard')}
-              className="rounded bg-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-300"
-            >
-              Back
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded bg-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-300"
-            >
-              Log out
-            </button>
-          </div>
-        </div>
+    <div className="mx-auto max-w-5xl">
+      <PageHeader title="Reports" className="print:hidden" />
 
-        <QueueSummarySection />
-        <VisitSummarySection />
-        <NoShowSummarySection />
-        <PeakHoursByWeekdaySection />
-      </div>
+      <QueueSummarySection />
+      <VisitSummarySection />
+      <NoShowSummarySection />
+      <PeakHoursByWeekdaySection />
     </div>
   )
 }

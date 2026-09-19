@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { AppShell } from './components/AppShell'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AdminSettings } from './pages/AdminSettings'
 import { AnalyticsDashboard } from './pages/AnalyticsDashboard'
@@ -18,86 +19,29 @@ function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/tv-board" element={<TvBoard />} />
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/queue"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'personnel']}>
-            <QueueBoard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/appointments"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'personnel']}>
-            <Appointments />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/visits"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'personnel']}>
-            <VisitsSearch />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin/settings"
-        element={
-          <ProtectedRoute allowedRoles={['admin']}>
-            <AdminSettings />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/analytics"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'personnel']}>
-            <AnalyticsDashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin/reports"
-        element={
-          <ProtectedRoute allowedRoles={['admin']}>
-            <Reports />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/inventory"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'personnel']}>
-            <Inventory />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin/inventory/history"
-        element={
-          <ProtectedRoute allowedRoles={['admin']}>
-            <InventoryHistory />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin/audit-log"
-        element={
-          <ProtectedRoute allowedRoles={['admin']}>
-            <AuditLog />
-          </ProtectedRoute>
-        }
-      />
+
+      {/* Everything below is signed-in and rendered inside the sidebar shell. */}
+      <Route element={<ProtectedRoute />}>
+        <Route element={<AppShell />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+
+          <Route element={<ProtectedRoute allowedRoles={['admin', 'personnel']} />}>
+            <Route path="/queue" element={<QueueBoard />} />
+            <Route path="/appointments" element={<Appointments />} />
+            <Route path="/visits" element={<VisitsSearch />} />
+            <Route path="/inventory" element={<Inventory />} />
+            <Route path="/analytics" element={<AnalyticsDashboard />} />
+          </Route>
+
+          <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+            <Route path="/admin/settings" element={<AdminSettings />} />
+            <Route path="/admin/reports" element={<Reports />} />
+            <Route path="/admin/inventory/history" element={<InventoryHistory />} />
+            <Route path="/admin/audit-log" element={<AuditLog />} />
+          </Route>
+        </Route>
+      </Route>
+
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   )

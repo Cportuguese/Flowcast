@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 interface ProtectedRouteProps {
-  children: ReactNode
+  // Omit children to use as a layout route (renders <Outlet />).
+  children?: ReactNode
   allowedRoles?: Array<'admin' | 'personnel' | 'patient'>
 }
 
@@ -22,5 +23,5 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     return <Navigate to="/dashboard" replace />
   }
 
-  return <>{children}</>
+  return children ? <>{children}</> : <Outlet />
 }

@@ -1,8 +1,7 @@
 import axios from 'axios'
 import { useEffect, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
+import { PageHeader } from '../components/PageHeader'
 
 interface ClinicSchedule {
   id: number
@@ -50,8 +49,6 @@ function extractErrorMessage(err: unknown, fallback: string) {
 }
 
 export function AdminSettings() {
-  const { user, logout } = useAuth()
-  const navigate = useNavigate()
 
   const [forms, setForms] = useState<Record<number, DayForm>>({})
   const [isLoading, setIsLoading] = useState(true)
@@ -144,195 +141,167 @@ export function AdminSettings() {
     }
   }
 
-  async function handleLogout() {
-    await logout()
-    navigate('/login')
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="mx-auto max-w-4xl">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Clinic Settings</h1>
-            <p className="text-sm text-slate-500">Signed in as {user?.name} ({user?.role})</p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard')}
-              className="rounded bg-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-300"
-            >
-              Back
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded bg-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-300"
-            >
-              Log out
-            </button>
-          </div>
-        </div>
+    <div className="mx-auto max-w-4xl">
+      <PageHeader title="Clinic Settings" />
 
-        {error && (
-          <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
-        )}
+      {error && (
+        <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+      )}
 
-        {isLoading ? (
-          <p className="mt-6 text-slate-400">Loading…</p>
-        ) : (
-          <>
-            <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-200 px-5 py-4">
-                <h2 className="text-sm font-semibold text-slate-900">Weekly hours</h2>
-                <p className="text-xs text-slate-500">Turn a day on and set its hours, slot length, and capacity per slot.</p>
-              </div>
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3">Day</th>
-                    <th className="px-4 py-3">Open</th>
-                    <th className="px-4 py-3">Start</th>
-                    <th className="px-4 py-3">End</th>
-                    <th className="px-4 py-3">Slot (min)</th>
-                    <th className="px-4 py-3">Capacity</th>
-                    <th className="px-4 py-3"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {DAY_NAMES.map((name, day) => {
-                    const form = forms[day]
-                    if (!form) return null
-                    return (
-                      <tr key={day}>
-                        <td className="px-4 py-3 font-medium text-slate-900">{name}</td>
-                        <td className="px-4 py-3">
-                          <input
-                            type="checkbox"
-                            checked={form.is_active}
-                            onChange={(e) => updateForm(day, { is_active: e.target.checked })}
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <input
-                            type="time"
-                            value={form.start_time}
-                            onChange={(e) => updateForm(day, { start_time: e.target.value })}
-                            className="rounded border border-slate-300 px-2 py-1 text-sm"
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <input
-                            type="time"
-                            value={form.end_time}
-                            onChange={(e) => updateForm(day, { end_time: e.target.value })}
-                            className="rounded border border-slate-300 px-2 py-1 text-sm"
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <input
-                            type="number"
-                            min={5}
-                            max={240}
-                            value={form.slot_minutes}
-                            onChange={(e) => updateForm(day, { slot_minutes: Number(e.target.value) })}
-                            className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <input
-                            type="number"
-                            min={1}
-                            value={form.capacity}
-                            onChange={(e) => updateForm(day, { capacity: Number(e.target.value) })}
-                            className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <button
-                            type="button"
-                            disabled={savingDay === day}
-                            onClick={() => handleSaveDay(day)}
-                            className="rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-                          >
-                            {savingDay === day ? 'Saving…' : 'Save'}
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </section>
+      {isLoading ? (
+        <p className="mt-6 text-slate-400">Loading…</p>
+      ) : (
+        <>
+          <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <h2 className="text-sm font-semibold text-slate-900">Weekly hours</h2>
+              <p className="text-xs text-slate-500">Turn a day on and set its hours, slot length, and capacity per slot.</p>
+            </div>
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Day</th>
+                  <th className="px-4 py-3">Open</th>
+                  <th className="px-4 py-3">Start</th>
+                  <th className="px-4 py-3">End</th>
+                  <th className="px-4 py-3">Slot (min)</th>
+                  <th className="px-4 py-3">Capacity</th>
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {DAY_NAMES.map((name, day) => {
+                  const form = forms[day]
+                  if (!form) return null
+                  return (
+                    <tr key={day}>
+                      <td className="px-4 py-3 font-medium text-slate-900">{name}</td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={form.is_active}
+                          onChange={(e) => updateForm(day, { is_active: e.target.checked })}
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="time"
+                          value={form.start_time}
+                          onChange={(e) => updateForm(day, { start_time: e.target.value })}
+                          className="rounded border border-slate-300 px-2 py-1 text-sm"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="time"
+                          value={form.end_time}
+                          onChange={(e) => updateForm(day, { end_time: e.target.value })}
+                          className="rounded border border-slate-300 px-2 py-1 text-sm"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="number"
+                          min={5}
+                          max={240}
+                          value={form.slot_minutes}
+                          onChange={(e) => updateForm(day, { slot_minutes: Number(e.target.value) })}
+                          className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="number"
+                          min={1}
+                          value={form.capacity}
+                          onChange={(e) => updateForm(day, { capacity: Number(e.target.value) })}
+                          className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          disabled={savingDay === day}
+                          onClick={() => handleSaveDay(day)}
+                          className="rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {savingDay === day ? 'Saving…' : 'Save'}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </section>
 
-            <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-200 px-5 py-4">
-                <h2 className="text-sm font-semibold text-slate-900">Event days</h2>
-                <p className="text-xs text-slate-500">
-                  Flag high-volume or closed dates (enrollment, PATHFIT, holidays). Flagged dates block booking.
-                </p>
-              </div>
+          <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <h2 className="text-sm font-semibold text-slate-900">Event days</h2>
+              <p className="text-xs text-slate-500">
+                Flag high-volume or closed dates (enrollment, PATHFIT, holidays). Flagged dates block booking.
+              </p>
+            </div>
 
-              <form onSubmit={handleAddEventDay} className="grid gap-3 border-b border-slate-100 p-5 sm:grid-cols-4">
-                <input
-                  type="date"
-                  required
-                  value={newDate}
-                  onChange={(e) => setNewDate(e.target.value)}
-                  className="rounded border border-slate-300 px-3 py-2 text-sm"
-                />
-                <input
-                  type="text"
-                  required
-                  placeholder="Label (e.g. Enrollment week)"
-                  value={newLabel}
-                  onChange={(e) => setNewLabel(e.target.value)}
-                  className="rounded border border-slate-300 px-3 py-2 text-sm sm:col-span-2"
-                />
-                <input
-                  type="text"
-                  placeholder="Note (optional)"
-                  value={newNote}
-                  onChange={(e) => setNewNote(e.target.value)}
-                  className="rounded border border-slate-300 px-3 py-2 text-sm"
-                />
-                <button
-                  type="submit"
-                  disabled={isAddingEventDay}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 sm:col-span-4"
-                >
-                  {isAddingEventDay ? 'Adding…' : 'Flag this date'}
-                </button>
-              </form>
+            <form onSubmit={handleAddEventDay} className="grid gap-3 border-b border-slate-100 p-5 sm:grid-cols-4">
+              <input
+                type="date"
+                required
+                value={newDate}
+                onChange={(e) => setNewDate(e.target.value)}
+                className="rounded border border-slate-300 px-3 py-2 text-sm"
+              />
+              <input
+                type="text"
+                required
+                placeholder="Label (e.g. Enrollment week)"
+                value={newLabel}
+                onChange={(e) => setNewLabel(e.target.value)}
+                className="rounded border border-slate-300 px-3 py-2 text-sm sm:col-span-2"
+              />
+              <input
+                type="text"
+                placeholder="Note (optional)"
+                value={newNote}
+                onChange={(e) => setNewNote(e.target.value)}
+                className="rounded border border-slate-300 px-3 py-2 text-sm"
+              />
+              <button
+                type="submit"
+                disabled={isAddingEventDay}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 sm:col-span-4"
+              >
+                {isAddingEventDay ? 'Adding…' : 'Flag this date'}
+              </button>
+            </form>
 
-              <ul className="divide-y divide-slate-100">
-                {eventDays.length === 0 && (
-                  <li className="px-5 py-4 text-sm text-slate-400">No event days flagged.</li>
-                )}
-                {eventDays.map((eventDay) => (
-                  <li key={eventDay.id} className="flex items-center justify-between px-5 py-3">
-                    <div>
-                      <div className="text-sm font-medium text-slate-900">
-                        {eventDay.date} — {eventDay.label}
-                      </div>
-                      {eventDay.note && <div className="text-xs text-slate-500">{eventDay.note}</div>}
+            <ul className="divide-y divide-slate-100">
+              {eventDays.length === 0 && (
+                <li className="px-5 py-4 text-sm text-slate-400">No event days flagged.</li>
+              )}
+              {eventDays.map((eventDay) => (
+                <li key={eventDay.id} className="flex items-center justify-between px-5 py-3">
+                  <div>
+                    <div className="text-sm font-medium text-slate-900">
+                      {eventDay.date} — {eventDay.label}
                     </div>
-                    <button
-                      type="button"
-                      disabled={deletingEventDayId === eventDay.id}
-                      onClick={() => handleDeleteEventDay(eventDay.id)}
-                      className="rounded bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-200 disabled:opacity-50"
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          </>
-        )}
-      </div>
+                    {eventDay.note && <div className="text-xs text-slate-500">{eventDay.note}</div>}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={deletingEventDayId === eventDay.id}
+                    onClick={() => handleDeleteEventDay(eventDay.id)}
+                    className="rounded bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-200 disabled:opacity-50"
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </>
+      )}
     </div>
   )
 }

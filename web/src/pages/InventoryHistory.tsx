@@ -1,8 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { extractErrorMessage, type Medicine } from '../lib/inventory'
+import { PageHeader } from '../components/PageHeader'
 
 interface InventoryLogEntry {
   id: number
@@ -46,8 +45,6 @@ function todayIso() {
 }
 
 export function InventoryHistory() {
-  const { user, logout } = useAuth()
-  const navigate = useNavigate()
 
   const [medicines, setMedicines] = useState<Medicine[]>([])
   const [dateFrom, setDateFrom] = useState('')
@@ -105,130 +102,110 @@ export function InventoryHistory() {
     downloadCsv(`inventory-history-${dateFrom || 'all'}-to-${dateTo || todayIso()}.csv`, [header, ...rows])
   }
 
-  async function handleLogout() {
-    await logout()
-    navigate('/login')
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="mx-auto max-w-5xl">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Inventory History</h1>
-            <p className="text-sm text-slate-500">Signed in as {user?.name} ({user?.role})</p>
-          </div>
-          <div className="flex gap-2">
-            <button type="button" onClick={() => navigate('/inventory')} className="rounded bg-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-300">
-              Back
-            </button>
-            <button type="button" onClick={handleLogout} className="rounded bg-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-300">
-              Log out
-            </button>
-          </div>
+    <div className="mx-auto max-w-5xl">
+      <PageHeader title="Inventory History" />
+
+      <form onSubmit={handleSearch} className="mt-6 flex flex-wrap items-end gap-3">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-700">From</label>
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
         </div>
-
-        <form onSubmit={handleSearch} className="mt-6 flex flex-wrap items-end gap-3">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-700">From</label>
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-700">To</label>
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-700">Medicine</label>
-            <select value={medicineId} onChange={(e) => setMedicineId(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              <option value="">All</option>
-              {medicines.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                  {m.is_active ? '' : ' (archived)'}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-700">Type</label>
-            <select value={type} onChange={(e) => setType(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              <option value="">All</option>
-              <option value="stock_in">Stock in</option>
-              <option value="stock_out">Stock out</option>
-              <option value="disposed">Disposed</option>
-            </select>
-          </div>
-          <button type="submit" disabled={isSearching} className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-            {isSearching ? 'Searching…' : 'Search'}
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-700">To</label>
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-700">Medicine</label>
+          <select value={medicineId} onChange={(e) => setMedicineId(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+            <option value="">All</option>
+            {medicines.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+                {m.is_active ? '' : ' (archived)'}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-700">Type</label>
+          <select value={type} onChange={(e) => setType(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+            <option value="">All</option>
+            <option value="stock_in">Stock in</option>
+            <option value="stock_out">Stock out</option>
+            <option value="disposed">Disposed</option>
+          </select>
+        </div>
+        <button type="submit" disabled={isSearching} className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+          {isSearching ? 'Searching…' : 'Search'}
+        </button>
+        {results && results.length > 0 && (
+          <button type="button" onClick={handleExport} className="rounded-lg border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+            Download CSV
           </button>
-          {results && results.length > 0 && (
-            <button type="button" onClick={handleExport} className="rounded-lg border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-              Download CSV
-            </button>
-          )}
-        </form>
-
-        {error && <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
-
-        {results && (
-          <div className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">Date/Time</th>
-                  <th className="px-4 py-3">Type</th>
-                  <th className="px-4 py-3">Medicine</th>
-                  <th className="px-4 py-3 text-right">Qty</th>
-                  <th className="px-4 py-3">Batch</th>
-                  <th className="px-4 py-3">By</th>
-                  <th className="px-4 py-3">Reference</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {results.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center text-slate-400">No transactions found.</td>
-                  </tr>
-                )}
-                {results.map((log) => (
-                  <tr key={log.id}>
-                    <td className="px-4 py-3 text-slate-500">{new Date(log.created_at).toLocaleString()}</td>
-                    <td className="px-4 py-3">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_STYLES[log.type]}`}>{TYPE_LABELS[log.type]}</span>
-                    </td>
-                    <td className="px-4 py-3 font-medium text-slate-900">{log.medicine.name}</td>
-                    <td className={`px-4 py-3 text-right font-semibold ${log.type === 'stock_in' ? 'text-green-700' : 'text-slate-700'}`}>
-                      {log.type === 'stock_in' ? '+' : '−'}
-                      {log.quantity} <span className="font-normal text-slate-500">{log.medicine.unit}</span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {log.batch ? (
-                        <>
-                          {log.batch.batch_number ?? `#${log.batch.id}`}
-                          <div className="text-xs text-slate-400">exp. {log.batch.expiry_date}</div>
-                        </>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">{log.user?.name ?? 'System'}</td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {log.visit ? (
-                        <>
-                          Visit #{log.visit.id}
-                          {log.visit.patient_name && <div className="text-xs text-slate-400">{log.visit.patient_name}</div>}
-                        </>
-                      ) : (
-                        log.notes ?? '—'
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         )}
-      </div>
+      </form>
+
+      {error && <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+
+      {results && (
+        <div className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Date/Time</th>
+                <th className="px-4 py-3">Type</th>
+                <th className="px-4 py-3">Medicine</th>
+                <th className="px-4 py-3 text-right">Qty</th>
+                <th className="px-4 py-3">Batch</th>
+                <th className="px-4 py-3">By</th>
+                <th className="px-4 py-3">Reference</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {results.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-6 text-center text-slate-400">No transactions found.</td>
+                </tr>
+              )}
+              {results.map((log) => (
+                <tr key={log.id}>
+                  <td className="px-4 py-3 text-slate-500">{new Date(log.created_at).toLocaleString()}</td>
+                  <td className="px-4 py-3">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_STYLES[log.type]}`}>{TYPE_LABELS[log.type]}</span>
+                  </td>
+                  <td className="px-4 py-3 font-medium text-slate-900">{log.medicine.name}</td>
+                  <td className={`px-4 py-3 text-right font-semibold ${log.type === 'stock_in' ? 'text-green-700' : 'text-slate-700'}`}>
+                    {log.type === 'stock_in' ? '+' : '−'}
+                    {log.quantity} <span className="font-normal text-slate-500">{log.medicine.unit}</span>
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {log.batch ? (
+                      <>
+                        {log.batch.batch_number ?? `#${log.batch.id}`}
+                        <div className="text-xs text-slate-400">exp. {log.batch.expiry_date}</div>
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">{log.user?.name ?? 'System'}</td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {log.visit ? (
+                      <>
+                        Visit #{log.visit.id}
+                        {log.visit.patient_name && <div className="text-xs text-slate-400">{log.visit.patient_name}</div>}
+                      </>
+                    ) : (
+                      log.notes ?? '—'
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

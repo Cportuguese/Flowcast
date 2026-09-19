@@ -1,10 +1,9 @@
 import axios from 'axios'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { VisitFormModal } from '../components/VisitFormModal'
-import { useAuth } from '../context/AuthContext'
 import { getEcho } from '../lib/echo'
 import { api } from '../lib/api'
+import { PageHeader } from '../components/PageHeader'
 
 interface QueueEntry {
   id: number
@@ -33,8 +32,6 @@ const STATUS_LABELS: Record<QueueEntry['status'], string> = {
 }
 
 export function QueueBoard() {
-  const { user, logout } = useAuth()
-  const navigate = useNavigate()
   const [date, setDate] = useState<string | null>(null)
   const [entries, setEntries] = useState<QueueEntry[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -161,11 +158,6 @@ export function QueueBoard() {
     }
   }
 
-  async function handleLogout() {
-    await logout()
-    navigate('/login')
-  }
-
   const waitingCount = entries.filter((e) => e.status === 'waiting').length
   const inConsultation = entries.filter((e) => e.status === 'in_consultation')
   const visibleEntries = statusFilter === 'all' ? entries : entries.filter((e) => e.status === statusFilter)
@@ -178,32 +170,9 @@ export function QueueBoard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <>
       <div className="mx-auto max-w-4xl">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Live Queue</h1>
-            <p className="text-sm text-slate-500">
-              {date ?? '—'} · Signed in as {user?.name} ({user?.role})
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard')}
-              className="rounded bg-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-300"
-            >
-              Back
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded bg-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-300"
-            >
-              Log out
-            </button>
-          </div>
-        </div>
+        <PageHeader title="Live Queue" subtitle={date ?? '—'} />
 
         {actionError && (
           <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{actionError}</p>
@@ -403,6 +372,6 @@ export function QueueBoard() {
           onSaved={() => setVisitFormEntry(null)}
         />
       )}
-    </div>
+    </>
   )
 }

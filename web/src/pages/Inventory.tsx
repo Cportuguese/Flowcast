@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { extractErrorMessage, type Medicine } from '../lib/inventory'
+import { PageHeader } from '../components/PageHeader'
 
 interface BatchAlert {
   id: number
@@ -23,12 +24,11 @@ const STATUS_STYLES: Record<Medicine['status'], string> = {
 
 const STATUS_LABELS: Record<Medicine['status'], string> = { ok: 'OK', low: 'Low', out: 'Out' }
 
-
 const inputClass =
   'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100'
 
 export function Inventory() {
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const isAdmin = user?.role === 'admin'
 
@@ -86,31 +86,13 @@ export function Inventory() {
     }
   }
 
-  async function handleLogout() {
-    await logout()
-    navigate('/login')
-  }
-
   const lowStock = medicines.filter((m) => m.is_active && m.status !== 'ok')
   const activeMedicines = medicines.filter((m) => m.is_active)
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <>
       <div className="mx-auto max-w-5xl">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Inventory</h1>
-            <p className="text-sm text-slate-500">Signed in as {user?.name} ({user?.role})</p>
-          </div>
-          <div className="flex gap-2">
-            <button type="button" onClick={() => navigate('/dashboard')} className="rounded bg-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-300">
-              Back
-            </button>
-            <button type="button" onClick={handleLogout} className="rounded bg-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-300">
-              Log out
-            </button>
-          </div>
-        </div>
+        <PageHeader title="Inventory" />
 
         {error && <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
@@ -304,7 +286,7 @@ export function Inventory() {
           }}
         />
       )}
-    </div>
+    </>
   )
 }
 
