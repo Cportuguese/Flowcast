@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CertificateController;
 use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\MedicineController;
 use App\Http\Controllers\Api\QueueController;
@@ -95,6 +96,13 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::get('/visits/{queueEntry}', [VisitController::class, 'show']);
+
+    // Medical certificates — only personnel issue them; admin and the
+    // patient concerned can view/download (ownership checked in-controller).
+    Route::post('/visits/{visit}/certificate', [CertificateController::class, 'store'])
+        ->middleware('role:personnel');
+    Route::get('/visits/{visit}/certificate', [CertificateController::class, 'show']);
+    Route::get('/visits/{visit}/certificate/download', [CertificateController::class, 'download']);
 
     // Phase 6 — inventory. Catalog edits, expired write-offs and the full
     // log are admin; receiving and dispensing stock is the nurse's job.

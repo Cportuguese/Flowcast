@@ -69,6 +69,9 @@ class RoleAccessTest extends TestCase
             'visits search' => ['GET', '/api/admin/visits/search', self::STAFF],
             'visits mine' => ['GET', '/api/visits/mine', ['patient']],
             'visits show' => ['GET', '/api/visits/{queueEntry}', self::ALL],
+            'certificate issue' => ['POST', '/api/visits/{visit}/certificate', ['personnel']],
+            'certificate show' => ['GET', '/api/visits/{visit}/certificate', self::ALL],
+            'certificate download' => ['GET', '/api/visits/{visit}/certificate/download', self::ALL],
 
             // Phase 5 — analytics
             'analytics dashboard' => ['GET', '/api/analytics/dashboard', self::STAFF],
@@ -162,7 +165,11 @@ class RoleAccessTest extends TestCase
         }
 
         $entry = QueueEntry::factory()->for($patient, 'patient')->create();
-        VisitRecord::factory()->for($entry, 'queueEntry')->create(['patient_id' => $patient->id]);
+        $visit = VisitRecord::factory()->for($entry, 'queueEntry')->create(['patient_id' => $patient->id]);
+
+        if (str_contains($uri, '{visit}')) {
+            return str_replace('{visit}', (string) $visit->id, $uri);
+        }
 
         return str_replace('{queueEntry}', (string) $entry->id, $uri);
     }

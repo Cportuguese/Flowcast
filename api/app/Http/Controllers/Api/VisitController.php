@@ -150,7 +150,7 @@ class VisitController extends Controller
      */
     private function formatVisit(VisitRecord $visit): array
     {
-        $visit->loadMissing('patient:id,name,school_id', 'createdBy:id,name', 'inventoryLogs.medicine:id,name,unit');
+        $visit->loadMissing('patient:id,name,school_id', 'createdBy:id,name', 'inventoryLogs.medicine:id,name,unit', 'certificate');
 
         // A dispense can span two batches (two log rows); show it once.
         $medicines = $visit->inventoryLogs
@@ -173,6 +173,7 @@ class VisitController extends Controller
                 'school_id' => $visit->patient->school_id,
             ],
             'created_by' => $visit->createdBy->name,
+            'certificate' => $visit->certificate ? CertificateController::format($visit->certificate) : null,
             'complaint' => $visit->complaint,
             'vitals' => [
                 'blood_pressure' => $visit->blood_pressure,
