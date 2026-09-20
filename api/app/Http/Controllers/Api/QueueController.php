@@ -8,6 +8,7 @@ use App\Events\QueueUpdated;
 use App\Events\TicketCalled;
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
+use App\Models\ClinicSchedule;
 use App\Models\QueueEntry;
 use App\Models\User;
 use App\Services\AuditLogger;
@@ -244,7 +245,8 @@ class QueueController extends Controller
 
     /**
      * Public, unauthenticated board for a waiting-room TV display.
-     * No patient data — numbers and statuses only.
+     * No patient data — numbers and statuses only, plus opening hours so
+     * the board can show a "closed" state.
      */
     public function boardToday()
     {
@@ -256,7 +258,58 @@ class QueueController extends Controller
                 'queue_number' => $entry->queue_number,
                 'status' => $entry->status,
             ])->values()->all(),
+            'hours' => $this->boardHours(Carbon::now()),
         ]);
+    }
+
+    /**
+     * Whether the clinic is open right now, today's hours, and the next
+     * opening within the coming week (today's, if it hasn't started yet).
+     *
+     * @return array{is_open: bool, today: array{start_time: string, end_time: string}|null, next_opening: array{date: string, day: string, start_time: string}|null}
+     */
+    private function boardHours(Carbon $now): array
+    {
+        $schedules = ClinicSchedule::where('is_active', true)->get()->keyBy('day_of_week');
+        $todaySchedule = $schedules->get($now->dayOfWeek);
+        $clock = $now->format('H:i:s');
+
+        $isOpen = $todaySchedule
+            && $clock >= $this->toTime($todaySchedule->start_time)
+            && $clock < $this->toTime($todaySchedule->end_time);
+
+        $nextOpening = null;
+        for ($offset = 0; $offset < 7; $offset++) {
+            $day = $now->copy()->addDays($offset);
+            $schedule = $schedules->get($day->dayOfWeek);
+            if (! $schedule) {
+                continue;
+            }
+            if ($offset === 0 && $clock >= $this->toTime($schedule->start_time)) {
+                continue; // today's session already started (or ended)
+            }
+            $nextOpening = [
+                'date' => $day->toDateString(),
+                'day' => $day->format('l'),
+                'start_time' => substr($this->toTime($schedule->start_time), 0, 5),
+            ];
+            break;
+        }
+
+        return [
+            'is_open' => (bool) $isOpen,
+            'today' => $todaySchedule ? [
+                'start_time' => substr($this->toTime($todaySchedule->start_time), 0, 5),
+                'end_time' => substr($this->toTime($todaySchedule->end_time), 0, 5),
+            ] : null,
+            'next_opening' => $nextOpening,
+        ];
+    }
+
+    /** Normalise "08:00" / "08:00:00" to "HH:MM:SS" for string comparison. */
+    private function toTime(string $time): string
+    {
+        return strlen($time) === 5 ? $time.':00' : $time;
     }
 
     public function mine(Request $request)

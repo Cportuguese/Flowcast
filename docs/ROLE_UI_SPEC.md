@@ -240,7 +240,7 @@ Fix while redesigning: send `patient_type` + `contact_no` from Register (gap #3)
 
 Patient on **web**: replace empty `/dashboard` with a single centered card — logo, "Flowcast for patients lives in the mobile app", Log out. Same card, mirrored, for staff on mobile ([index.tsx](mobile/app/index.tsx)): "Staff tools are on the web dashboard".
 
-### 3.5 TV BOARD — public
+### 3.5 TV BOARD — public — ✅ implemented Sep 20, 2026
 
 No buttons — confirmed and kept. Refinements only:
 
@@ -304,7 +304,7 @@ All ✅/✗ in the non-italic rows are **already enforced today** at both API an
 2. ~~Split `Dashboard.tsx` into role-switched homes~~ — done: [PersonnelHome.tsx](web/src/pages/home/PersonnelHome.tsx), [AdminHome.tsx](web/src/pages/home/AdminHome.tsx), shared [useTodayQueue.ts](web/src/lib/useTodayQueue.ts) + [StatTile.tsx](web/src/components/StatTile.tsx). "Register walk-in" on Home opens `/queue?walkin=1`.
 3. ~~Small `QueueHistory` page for admin~~ — done with the Part 1 gap fixes.
 4. ~~Mobile tabs + patient home~~ — done: [(tabs)/_layout.tsx](mobile/app/(tabs)/_layout.tsx), [(tabs)/index.tsx](mobile/app/(tabs)/index.tsx) (states A–D, "Now serving" from the public board channel), Log out behind the account icon, [ScreenHeader.tsx](mobile/components/ScreenHeader.tsx). Register fields were done with the Part 1 gaps.
-5. TV board: clock, connection dot, closed state.
+5. ~~TV board: clock, connection dot, closed state~~ — done: [TvBoard.tsx](web/src/pages/TvBoard.tsx); `GET /queue-board/today` now returns an `hours` block (is_open / today / next_opening) so the public board can show "Clinic closed · Opens Monday at 8:00 AM".
 6. Certificates: separate phase (API first), then the three planned buttons.
 
 ## Verification (for this session)
