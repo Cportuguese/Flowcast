@@ -43,7 +43,7 @@ export default function Index() {
       </Text>
       <Pressable
         onPress={handleLogout}
-        className="mt-4 w-full items-center rounded-lg bg-[#0b1636] py-3.5"
+        className="mt-4 w-full items-center rounded-lg bg-brand py-3.5"
       >
         <Text className="text-base font-semibold text-white">Log out</Text>
       </Pressable>

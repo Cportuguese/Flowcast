@@ -161,7 +161,7 @@ export default function MyAppointments() {
 
         <Pressable
           onPress={() => router.push('/book-appointment')}
-          className="mt-6 items-center rounded-lg bg-[#0b1636] py-3.5"
+          className="mt-6 items-center rounded-lg bg-brand py-3.5"
         >
           <Text className="text-base font-semibold text-white">Book a new appointment</Text>
         </Pressable>

@@ -2,6 +2,7 @@ import axios from 'axios'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import { PageHeader } from '../components/PageHeader'
+import { StatusPill, type StatusTone } from '../components/StatusPill'
 
 interface Appointment {
   id: number
@@ -12,12 +13,12 @@ interface Appointment {
   patient: { id: number; name: string; email: string; contact_no: string | null }
 }
 
-const STATUS_STYLES: Record<Appointment['status'], string> = {
-  booked: 'bg-slate-100 text-slate-700',
-  checked_in: 'bg-blue-100 text-blue-700',
-  completed: 'bg-green-100 text-green-700',
-  cancelled: 'bg-gray-100 text-gray-500',
-  no_show: 'bg-red-100 text-red-700',
+const STATUS_TONES: Record<Appointment['status'], StatusTone> = {
+  booked: 'neutral',
+  checked_in: 'info',
+  completed: 'success',
+  cancelled: 'muted',
+  no_show: 'danger',
 }
 
 function todayString() {
@@ -138,9 +139,9 @@ export function Appointments() {
                 </td>
                 <td className="px-4 py-3 text-slate-600">{appointment.reason}</td>
                 <td className="px-4 py-3">
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[appointment.status]}`}>
+                  <StatusPill tone={STATUS_TONES[appointment.status]}>
                     {appointment.status.replace('_', ' ')}
-                  </span>
+                  </StatusPill>
                 </td>
                 <td className="px-4 py-3">
                   {(appointment.status === 'booked' || appointment.status === 'checked_in') && (

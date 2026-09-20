@@ -2,6 +2,7 @@ import axios from 'axios'
 import { useState, type FormEvent } from 'react'
 import { api } from '../lib/api'
 import { PageHeader } from '../components/PageHeader'
+import { buttonClass } from '../components/Button'
 
 interface QueueSummaryDay {
   date: string | null
@@ -155,7 +156,7 @@ function QueueSummarySection() {
           <label className="mb-1 block text-xs font-medium text-slate-700">To</label>
           <input type="date" required value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded border border-slate-300 px-3 py-2 text-sm" />
         </div>
-        <button type="submit" disabled={isLoading} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+        <button type="submit" disabled={isLoading} className={buttonClass.primary}>
           {isLoading ? 'Running…' : 'Run'}
         </button>
         {data && <ReportActions onCsv={handleCsv} />}
@@ -258,7 +259,7 @@ function VisitSummarySection() {
           <label className="mb-1 block text-xs font-medium text-slate-700">To</label>
           <input type="date" required value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded border border-slate-300 px-3 py-2 text-sm" />
         </div>
-        <button type="submit" disabled={isLoading} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+        <button type="submit" disabled={isLoading} className={buttonClass.primary}>
           {isLoading ? 'Running…' : 'Run'}
         </button>
         {data && <ReportActions onCsv={handleCsv} />}
@@ -347,7 +348,7 @@ function NoShowSummarySection() {
           <label className="mb-1 block text-xs font-medium text-slate-700">Month</label>
           <input type="month" required value={month} onChange={(e) => setMonth(e.target.value)} className="rounded border border-slate-300 px-3 py-2 text-sm" />
         </div>
-        <button type="submit" disabled={isLoading} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+        <button type="submit" disabled={isLoading} className={buttonClass.primary}>
           {isLoading ? 'Running…' : 'Run'}
         </button>
         {data && <ReportActions onCsv={handleCsv} />}
@@ -438,7 +439,7 @@ function PeakHoursByWeekdaySection() {
           type="button"
           onClick={handleRefresh}
           disabled={isLoading}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 print:hidden"
+          className={`${buttonClass.primary} print:hidden`}
         >
           {isLoading ? 'Loading…' : data ? 'Refresh' : 'Load'}
         </button>

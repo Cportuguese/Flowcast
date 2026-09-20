@@ -1,3 +1,5 @@
+import type { StatusTone } from '../components/StatusPill'
+
 // Shared shape of a queue entry as returned by QueueController::formatEntry,
 // plus the status styling used wherever entries are listed.
 
@@ -13,11 +15,11 @@ export interface QueueEntry {
   completed_at: string | null
 }
 
-export const QUEUE_STATUS_STYLES: Record<QueueEntry['status'], string> = {
-  waiting: 'bg-slate-100 text-slate-700',
-  in_consultation: 'bg-blue-100 text-blue-700',
-  done: 'bg-green-100 text-green-700',
-  skipped: 'bg-red-100 text-red-700',
+export const QUEUE_STATUS_TONES: Record<QueueEntry['status'], StatusTone> = {
+  waiting: 'neutral',
+  in_consultation: 'info',
+  done: 'success',
+  skipped: 'danger',
 }
 
 export const QUEUE_STATUS_LABELS: Record<QueueEntry['status'], string> = {

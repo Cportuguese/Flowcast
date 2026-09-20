@@ -2,6 +2,7 @@ import axios from 'axios'
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../lib/api'
 import { PageHeader } from '../components/PageHeader'
+import { buttonClass } from '../components/Button'
 
 interface ClinicSchedule {
   id: number
@@ -270,7 +271,7 @@ export function AdminSettings() {
               <button
                 type="submit"
                 disabled={isAddingEventDay}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 sm:col-span-4"
+                className={`${buttonClass.primary} sm:col-span-4`}
               >
                 {isAddingEventDay ? 'Adding…' : 'Flag this date'}
               </button>

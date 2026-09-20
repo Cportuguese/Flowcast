@@ -136,7 +136,7 @@ export default function BookAppointment() {
         </Text>
         <Pressable
           onPress={() => router.replace('/my-appointments')}
-          className="mt-8 items-center rounded-lg bg-[#0b1636] px-6 py-3.5"
+          className="mt-8 items-center rounded-lg bg-brand px-6 py-3.5"
         >
           <Text className="text-base font-semibold text-white">View my appointments</Text>
         </Pressable>
@@ -178,7 +178,7 @@ export default function BookAppointment() {
                   onPress={() => handleSelectDate(d)}
                   className={`w-16 items-center rounded-xl border py-3 ${
                     isSelected
-                      ? 'border-[#0b1636] bg-[#0b1636]'
+                      ? 'border-brand bg-brand'
                       : isOpen
                         ? 'border-slate-200 bg-white'
                         : 'border-slate-100 bg-slate-50'
@@ -227,7 +227,7 @@ export default function BookAppointment() {
                       onPress={() => setSelectedTime(slot.time)}
                       className={`rounded-lg border px-4 py-2 ${
                         isSelected
-                          ? 'border-[#0b1636] bg-[#0b1636]'
+                          ? 'border-brand bg-brand'
                           : slot.available
                             ? 'border-slate-200 bg-white'
                             : 'border-slate-100 bg-slate-50'
@@ -264,7 +264,7 @@ export default function BookAppointment() {
             <Pressable
               onPress={handleConfirm}
               disabled={isSubmitting || !reason.trim()}
-              className="mt-6 items-center rounded-lg bg-[#0b1636] py-3.5 disabled:opacity-50"
+              className="mt-6 items-center rounded-lg bg-brand py-3.5 disabled:opacity-50"
             >
               {isSubmitting ? (
                 <ActivityIndicator color="white" />

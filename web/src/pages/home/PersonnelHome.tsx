@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { buttonClass } from '../../components/Button'
 import { PageHeader } from '../../components/PageHeader'
 import { StatTile } from '../../components/StatTile'
+import { StatusPill, type StatusTone } from '../../components/StatusPill'
 import { VisitFormModal } from '../../components/VisitFormModal'
 import { api } from '../../lib/api'
 import { extractErrorMessage } from '../../lib/errors'
@@ -29,12 +31,12 @@ const APPT_LABELS: Record<Appointment['status'], string> = {
   no_show: 'No-show',
 }
 
-const APPT_STYLES: Record<Appointment['status'], string> = {
-  booked: 'bg-slate-100 text-slate-700',
-  checked_in: 'bg-blue-100 text-blue-700',
-  completed: 'bg-green-100 text-green-700',
-  cancelled: 'bg-gray-100 text-gray-500',
-  no_show: 'bg-red-100 text-red-700',
+const APPT_TONES: Record<Appointment['status'], StatusTone> = {
+  booked: 'neutral',
+  checked_in: 'info',
+  completed: 'success',
+  cancelled: 'muted',
+  no_show: 'danger',
 }
 
 const UP_NEXT_LIMIT = 5
@@ -52,10 +54,6 @@ function isOpen(appt: Appointment) {
   return appt.status === 'booked' || appt.status === 'checked_in'
 }
 
-const primaryBtn =
-  'rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50'
-const outlineBtn =
-  'rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100'
 const rowBtn = 'rounded-md px-3 py-1.5 text-xs font-medium transition disabled:opacity-50'
 
 export function PersonnelHome() {
@@ -180,11 +178,11 @@ export function PersonnelHome() {
             type="button"
             onClick={queue.callNext}
             disabled={queue.isCallingNext || queue.waiting.length === 0}
-            className={primaryBtn}
+            className={buttonClass.primary}
           >
             {queue.isCallingNext ? 'Calling…' : `Call Next (${queue.waiting.length} waiting)`}
           </button>
-          <Link to="/queue?walkin=1" className={outlineBtn}>
+          <Link to="/queue?walkin=1" className={buttonClass.outline}>
             Register walk-in
           </Link>
         </div>
@@ -229,9 +227,7 @@ export function PersonnelHome() {
                       <span className="ml-3 truncate text-slate-700">{appt.patient.name}</span>
                     </span>
                     <span className="flex shrink-0 items-center gap-2">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${APPT_STYLES[appt.status]}`}>
-                        {APPT_LABELS[appt.status]}
-                      </span>
+                      <StatusPill tone={APPT_TONES[appt.status]}>{APPT_LABELS[appt.status]}</StatusPill>
                       {isOpen(appt) && (
                         <button
                           type="button"

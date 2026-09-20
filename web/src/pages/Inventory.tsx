@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { extractErrorMessage, type Medicine } from '../lib/inventory'
 import { PageHeader } from '../components/PageHeader'
+import { StatusPill, type StatusTone } from '../components/StatusPill'
+import { buttonClass } from '../components/Button'
 
 interface BatchAlert {
   id: number
@@ -16,10 +18,10 @@ interface BatchAlert {
 
 const UNIT_SUGGESTIONS = ['tablet', 'capsule', 'ml', 'sachet', 'bottle', 'box', 'piece']
 
-const STATUS_STYLES: Record<Medicine['status'], string> = {
-  ok: 'bg-green-100 text-green-800',
-  low: 'bg-yellow-100 text-yellow-800',
-  out: 'bg-red-100 text-red-800',
+const STATUS_TONES: Record<Medicine['status'], StatusTone> = {
+  ok: 'success',
+  low: 'warning',
+  out: 'danger',
 }
 
 const STATUS_LABELS: Record<Medicine['status'], string> = { ok: 'OK', low: 'Low', out: 'Out' }
@@ -116,14 +118,14 @@ export function Inventory() {
           <button
             type="button"
             onClick={() => setStockModal('in')}
-            className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            className={buttonClass.primary}
           >
             Stock in
           </button>
           <button
             type="button"
             onClick={() => setStockModal('out')}
-            className="rounded-lg border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            className={buttonClass.outline}
           >
             Stock out
           </button>
@@ -132,14 +134,14 @@ export function Inventory() {
               <button
                 type="button"
                 onClick={() => setMedicineModal({ editing: null })}
-                className="rounded-lg border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                className={buttonClass.outline}
               >
                 Add medicine
               </button>
               <button
                 type="button"
                 onClick={() => navigate('/admin/inventory/history')}
-                className="rounded-lg border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                className={buttonClass.outline}
               >
                 History
               </button>
@@ -195,9 +197,9 @@ export function Inventory() {
                     <td className="px-4 py-3 text-right text-slate-600">{m.reorder_level}</td>
                     <td className="px-4 py-3 text-slate-600">{m.next_expiry ?? '—'}</td>
                     <td className="px-4 py-3">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[m.status]}`}>
+                      <StatusPill tone={STATUS_TONES[m.status]}>
                         {STATUS_LABELS[m.status]}
-                      </span>
+                      </StatusPill>
                       {m.expired_quantity > 0 && (
                         <span className="ml-1 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700">
                           {m.expired_quantity} expired
@@ -397,13 +399,13 @@ function StockModal({
             />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
+            <button type="button" onClick={onClose} className={buttonClass.outline}>
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSaving || medicines.length === 0}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              className={buttonClass.primary}
             >
               {isSaving ? 'Saving…' : 'Save'}
             </button>
@@ -486,10 +488,10 @@ function MedicineFormModal({ editing, onClose, onSaved }: { editing: Medicine | 
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
+            <button type="button" onClick={onClose} className={buttonClass.outline}>
               Cancel
             </button>
-            <button type="submit" disabled={isSaving} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+            <button type="submit" disabled={isSaving} className={buttonClass.primary}>
               {isSaving ? 'Saving…' : editing ? 'Save changes' : 'Add medicine'}
             </button>
           </div>

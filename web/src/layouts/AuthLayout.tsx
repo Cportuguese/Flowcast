@@ -4,7 +4,7 @@ import logo from '../assets/logo.png'
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen w-full flex-col bg-white md:flex-row">
-      <div className="flex w-full flex-col justify-between bg-[#0b1636] px-10 py-12 text-white md:w-[42%] md:px-14 md:py-16">
+      <div className="flex w-full flex-col justify-between bg-brand px-10 py-12 text-white md:w-[42%] md:px-14 md:py-16">
         <div className="w-fit rounded-2xl bg-white px-4 py-3">
           <img src={logo} alt="Flowcast" className="h-20 w-20" />
         </div>

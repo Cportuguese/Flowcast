@@ -1,11 +1,12 @@
 import axios from 'axios'
 import { useCallback, useEffect, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
+import { StatusPill } from '../components/StatusPill'
 import { StatTile } from '../components/StatTile'
 import { api } from '../lib/api'
 import {
   QUEUE_STATUS_LABELS,
-  QUEUE_STATUS_STYLES,
+  QUEUE_STATUS_TONES,
   minutesBetween,
   type QueueEntry,
 } from '../lib/queue'
@@ -121,9 +122,9 @@ export function QueueHistory() {
                 </td>
                 <td className="px-4 py-3 capitalize text-slate-600">{entry.source.replace('_', ' ')}</td>
                 <td className="px-4 py-3">
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${QUEUE_STATUS_STYLES[entry.status]}`}>
+                  <StatusPill tone={QUEUE_STATUS_TONES[entry.status]}>
                     {QUEUE_STATUS_LABELS[entry.status]}
-                  </span>
+                  </StatusPill>
                 </td>
                 <td className="px-4 py-3 text-slate-500">{formatTime(entry.joined_at)}</td>
                 <td className="px-4 py-3 text-slate-500">{formatTime(entry.called_at)}</td>

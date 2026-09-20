@@ -2,6 +2,7 @@ import axios from 'axios'
 import { useState, type FormEvent } from 'react'
 import { api } from '../lib/api'
 import { PageHeader } from '../components/PageHeader'
+import { buttonClass } from '../components/Button'
 
 interface AuditLogEntry {
   id: number
@@ -83,7 +84,7 @@ export function AuditLog() {
         <button
           type="submit"
           disabled={isSearching}
-          className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+          className={buttonClass.primary}
         >
           {isSearching ? 'Searching…' : 'Search'}
         </button>

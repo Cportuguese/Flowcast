@@ -15,12 +15,10 @@ import {
 } from 'recharts'
 import { api } from '../lib/api'
 import { PageHeader } from '../components/PageHeader'
+import { CHART_COLORS } from '../lib/theme'
 import { StatTile } from '../components/StatTile'
 
-const COLOR_ACTUAL = '#2a78d6'
-const COLOR_FORECAST = '#eb6834'
-const COLOR_MUTED = '#898781'
-const COLOR_GRID = '#e1e0d9'
+const { actual: COLOR_ACTUAL, forecast: COLOR_FORECAST, muted: COLOR_MUTED, grid: COLOR_GRID } = CHART_COLORS
 
 interface Dashboard {
   date: string

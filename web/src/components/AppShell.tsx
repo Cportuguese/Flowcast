@@ -59,7 +59,7 @@ export function AppShell() {
   }
 
   const sidebar = (
-    <div className="flex h-full flex-col bg-[#0b1636] text-white">
+    <div className="flex h-full flex-col bg-brand text-white">
       <div className="flex items-center gap-3 px-5 py-5">
         <span className="rounded-lg bg-white p-1">
           <img src={logo} alt="" className="h-7 w-7" />
@@ -140,7 +140,7 @@ export function AppShell() {
       </aside>
 
       {/* Mobile top bar */}
-      <header className="sticky top-0 z-30 flex items-center justify-between bg-[#0b1636] px-4 py-3 text-white lg:hidden print:hidden">
+      <header className="sticky top-0 z-30 flex items-center justify-between bg-brand px-4 py-3 text-white lg:hidden print:hidden">
         <div className="flex items-center gap-2">
           <span className="rounded-md bg-white p-0.5">
             <img src={logo} alt="" className="h-6 w-6" />

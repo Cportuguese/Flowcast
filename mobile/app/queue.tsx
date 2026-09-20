@@ -212,7 +212,7 @@ export default function Queue() {
             <Pressable
               onPress={() => handleCheckIn()}
               disabled={isCheckingIn}
-              className="items-center rounded-lg bg-[#0b1636] py-3.5 disabled:opacity-50"
+              className="items-center rounded-lg bg-brand py-3.5 disabled:opacity-50"
             >
               {isCheckingIn ? (
                 <ActivityIndicator color="white" />

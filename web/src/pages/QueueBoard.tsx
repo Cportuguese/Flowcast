@@ -5,11 +5,13 @@ import { api } from '../lib/api'
 import { extractErrorMessage } from '../lib/errors'
 import {
   QUEUE_STATUS_LABELS,
-  QUEUE_STATUS_STYLES,
+  QUEUE_STATUS_TONES,
   type QueueEntry,
 } from '../lib/queue'
 import { timeInQueue, useTodayQueue } from '../lib/useTodayQueue'
 import { PageHeader } from '../components/PageHeader'
+import { StatusPill } from '../components/StatusPill'
+import { buttonClass } from '../components/Button'
 
 export function QueueBoard() {
   const {
@@ -75,14 +77,14 @@ export function QueueBoard() {
             type="button"
             onClick={callNext}
             disabled={isCallingNext || waiting.length === 0}
-            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+            className={buttonClass.primary}
           >
             {isCallingNext ? 'Calling…' : `Call Next (${waiting.length} waiting)`}
           </button>
           <button
             type="button"
             onClick={() => setShowWalkInForm((v) => !v)}
-            className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+            className={buttonClass.outline}
           >
             {showWalkInForm ? 'Cancel walk-in' : 'Register walk-in'}
           </button>
@@ -209,9 +211,9 @@ export function QueueBoard() {
                   </td>
                   <td className="px-4 py-3 capitalize text-slate-600">{entry.source.replace('_', ' ')}</td>
                   <td className="px-4 py-3">
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${QUEUE_STATUS_STYLES[entry.status]}`}>
+                    <StatusPill tone={QUEUE_STATUS_TONES[entry.status]}>
                       {QUEUE_STATUS_LABELS[entry.status]}
-                    </span>
+                    </StatusPill>
                   </td>
                   <td className="px-4 py-3 text-slate-500">
                     {entry.called_at ? new Date(entry.called_at).toLocaleTimeString() : '—'}

@@ -4,6 +4,7 @@ import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'rec
 import { PageHeader } from '../../components/PageHeader'
 import { StatTile } from '../../components/StatTile'
 import { api } from '../../lib/api'
+import { CHART_COLORS } from '../../lib/theme'
 import { useTodayQueue } from '../../lib/useTodayQueue'
 
 interface DashboardStats {
@@ -46,8 +47,6 @@ interface AuditEntry {
   created_at: string
 }
 
-// Same "actual" blue as the Analytics charts.
-const COLOR_ACTUAL = '#2a78d6'
 const SPARKLINE_DAYS = 7
 const ACTIVITY_LIMIT = 5
 
@@ -185,15 +184,15 @@ export function AdminHome() {
                   <XAxis dataKey="label" hide />
                   <YAxis hide domain={[0, 'dataMax']} />
                   <Tooltip
-                    cursor={{ stroke: '#e1e0d9' }}
-                    contentStyle={{ fontSize: 12, borderRadius: 8, borderColor: '#e1e0d9' }}
+                    cursor={{ stroke: CHART_COLORS.grid }}
+                    contentStyle={{ fontSize: 12, borderRadius: 8, borderColor: CHART_COLORS.grid }}
                     formatter={(value) => [`${value} arrivals`, '']}
                     labelFormatter={(label) => String(label)}
                   />
                   <Line
                     type="monotone"
                     dataKey="arrivals"
-                    stroke={COLOR_ACTUAL}
+                    stroke={CHART_COLORS.actual}
                     strokeWidth={2}
                     dot={false}
                     activeDot={{ r: 4 }}

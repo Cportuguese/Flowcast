@@ -109,7 +109,7 @@ export default function Register() {
                   key={type.value}
                   onPress={() => setPatientType(selected ? null : type.value)}
                   className={`flex-1 items-center rounded-lg border py-3 ${
-                    selected ? 'border-[#0b1636] bg-[#0b1636]' : 'border-slate-300 bg-white'
+                    selected ? 'border-brand bg-brand' : 'border-slate-300 bg-white'
                   }`}
                 >
                   <Text className={`text-sm font-medium ${selected ? 'text-white' : 'text-slate-700'}`}>
@@ -156,7 +156,7 @@ export default function Register() {
           <Pressable
             onPress={handleSubmit}
             disabled={isSubmitting}
-            className="mt-6 items-center justify-center rounded-lg bg-[#0b1636] py-3.5 disabled:opacity-50"
+            className="mt-6 items-center justify-center rounded-lg bg-brand py-3.5 disabled:opacity-50"
           >
             {isSubmitting ? (
               <ActivityIndicator color="white" />

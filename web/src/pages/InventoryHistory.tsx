@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../lib/api'
 import { extractErrorMessage, type Medicine } from '../lib/inventory'
 import { PageHeader } from '../components/PageHeader'
+import { StatusPill, type StatusTone } from '../components/StatusPill'
+import { buttonClass } from '../components/Button'
 
 interface InventoryLogEntry {
   id: number
@@ -21,10 +23,10 @@ const TYPE_LABELS: Record<InventoryLogEntry['type'], string> = {
   disposed: 'Disposed',
 }
 
-const TYPE_STYLES: Record<InventoryLogEntry['type'], string> = {
-  stock_in: 'bg-green-100 text-green-800',
-  stock_out: 'bg-blue-100 text-blue-800',
-  disposed: 'bg-slate-200 text-slate-700',
+const TYPE_TONES: Record<InventoryLogEntry['type'], StatusTone> = {
+  stock_in: 'success',
+  stock_out: 'info',
+  disposed: 'neutral',
 }
 
 function downloadCsv(filename: string, rows: Array<Array<string | number | null>>) {
@@ -136,11 +138,11 @@ export function InventoryHistory() {
             <option value="disposed">Disposed</option>
           </select>
         </div>
-        <button type="submit" disabled={isSearching} className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+        <button type="submit" disabled={isSearching} className={buttonClass.primary}>
           {isSearching ? 'Searching…' : 'Search'}
         </button>
         {results && results.length > 0 && (
-          <button type="button" onClick={handleExport} className="rounded-lg border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+          <button type="button" onClick={handleExport} className={buttonClass.outline}>
             Download CSV
           </button>
         )}
@@ -172,7 +174,7 @@ export function InventoryHistory() {
                 <tr key={log.id}>
                   <td className="px-4 py-3 text-slate-500">{new Date(log.created_at).toLocaleString()}</td>
                   <td className="px-4 py-3">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_STYLES[log.type]}`}>{TYPE_LABELS[log.type]}</span>
+                    <StatusPill tone={TYPE_TONES[log.type]}>{TYPE_LABELS[log.type]}</StatusPill>
                   </td>
                   <td className="px-4 py-3 font-medium text-slate-900">{log.medicine.name}</td>
                   <td className={`px-4 py-3 text-right font-semibold ${log.type === 'stock_in' ? 'text-green-700' : 'text-slate-700'}`}>

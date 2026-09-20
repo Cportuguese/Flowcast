@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../lib/api'
+import { buttonClass } from '../components/Button'
 
 interface MedicineOption {
   id: number
@@ -295,14 +296,14 @@ export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: 
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              className={buttonClass.outline}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSaving}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              className={buttonClass.primary}
             >
               {isSaving ? 'Saving…' : 'Save record'}
             </button>

@@ -69,18 +69,18 @@ Derived entirely from what exists; **no new colors**.
 
 | Token | Value | Source |
 |---|---|---|
-| `brand` | `#0b1636` navy | [AuthLayout.tsx:7](web/src/layouts/AuthLayout.tsx#L7), mobile primary buttons |
-| `accent` | `blue-600` / `#2a78d6` | primary buttons, chart "actual" line |
+| `brand` | `#0b1636` navy → `bg-brand` / `border-brand` | web [index.css](web/src/index.css) `@theme`; mobile [tailwind.config.js](mobile/tailwind.config.js) |
+| `accent` | `blue-600` (buttons) / `CHART_COLORS.actual` (charts) | [Button.tsx](web/src/components/Button.tsx), [lib/theme.ts](web/src/lib/theme.ts) |
 | `surface` | white cards on `gray-50` page | all pages |
 | `border` | `slate-200` | all pages |
 | `text` / `muted` | `slate-900` / `slate-500` | all pages |
-| status: waiting / in_consultation / done / skipped·no_show | `slate-100` / `blue-100` / `green-100` / `red-100` | [QueueBoard.tsx:21-26](web/src/pages/QueueBoard.tsx#L21-L26) |
+| status tones: neutral / info / success / warning / danger / muted | `slate-100` / `blue-100` / `green-100` / `amber-100` / `red-100` / `gray-100` | [StatusPill.tsx](web/src/components/StatusPill.tsx); queue map in [lib/queue.ts](web/src/lib/queue.ts) |
 | Font | system-ui stack | [index.css:4](web/src/index.css#L4) |
 | Radius / shadow | `rounded-lg`, `shadow-sm` | all cards |
 
 Minimalist rules: one primary (navy or blue-600) button per view; everything else is outline or text; no icons-only buttons without labels; max 4–5 stat tiles; no decorative gradients; whitespace over borders.
 
-Reusable pieces to extract when implementing (currently copy-pasted): `AppShell` (sidebar + content), `PageHeader` (title + date + actions slot), `StatTile` (already local in [AnalyticsDashboard.tsx:319](web/src/pages/AnalyticsDashboard.tsx#L319)), `StatusPill`, `Button` (primary/outline/danger/ghost).
+Reusable pieces — all extracted (Sep 20, 2026): [AppShell](web/src/components/AppShell.tsx), [PageHeader](web/src/components/PageHeader.tsx), [StatTile](web/src/components/StatTile.tsx), [StatusPill](web/src/components/StatusPill.tsx) (`tone` prop), [Button](web/src/components/Button.tsx) (`variant` primary/outline/danger/ghost; `buttonClass` for `<Link>`/`<a>`). New UI should use these rather than inline class strings.
 
 ---
 
@@ -300,7 +300,7 @@ All ✅/✗ in the non-italic rows are **already enforced today** at both API an
 
 ## Implementation order (for a future session — NOT this one)
 
-1. ~~`AppShell` + `PageHeader`~~ — done (commit d252b25). `StatTile` extracted with step 2; `StatusPill` / `Button` still inline.
+1. ~~`AppShell` + `PageHeader` + `StatTile` + `StatusPill` + `Button`~~ — all done (Part 2 complete).
 2. ~~Split `Dashboard.tsx` into role-switched homes~~ — done: [PersonnelHome.tsx](web/src/pages/home/PersonnelHome.tsx), [AdminHome.tsx](web/src/pages/home/AdminHome.tsx), shared [useTodayQueue.ts](web/src/lib/useTodayQueue.ts) + [StatTile.tsx](web/src/components/StatTile.tsx). "Register walk-in" on Home opens `/queue?walkin=1`.
 3. ~~Small `QueueHistory` page for admin~~ — done with the Part 1 gap fixes.
 4. Mobile: `app/(tabs)/` group with `index` (home), `appointments`, `visits`; move Log out to header; send `patient_type`/`contact_no` on register.

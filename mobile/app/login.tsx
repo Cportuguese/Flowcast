@@ -84,7 +84,7 @@ export default function Login() {
           <Pressable
             onPress={handleSubmit}
             disabled={isSubmitting}
-            className="mt-6 items-center justify-center rounded-lg bg-[#0b1636] py-3.5 disabled:opacity-50"
+            className="mt-6 items-center justify-center rounded-lg bg-brand py-3.5 disabled:opacity-50"
           >
             {isSubmitting ? (
               <ActivityIndicator color="white" />
