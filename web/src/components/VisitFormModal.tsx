@@ -2,6 +2,9 @@ import axios from 'axios'
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../lib/api'
 import { buttonClass } from '../components/Button'
+import { CertificatePanel } from './CertificatePanel'
+import { useAuth } from '../context/AuthContext'
+import type { Certificate } from '../lib/certificates'
 
 interface MedicineOption {
   id: number
@@ -38,6 +41,7 @@ const COMMON_COMPLAINTS = [
 ]
 
 export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: Props) {
+  const { user } = useAuth()
   const [complaint, setComplaint] = useState('')
   const [bloodPressure, setBloodPressure] = useState('')
   const [temperature, setTemperature] = useState('')
@@ -50,6 +54,8 @@ export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: 
   const [dispensed, setDispensed] = useState<DispensedLine[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  // Set once the record is saved; personnel then get the certificate step.
+  const [savedVisit, setSavedVisit] = useState<{ id: number; certificate: Certificate | null } | null>(null)
 
   // Only medicines that can actually be handed over right now.
   useEffect(() => {
@@ -99,7 +105,7 @@ export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: 
     setIsSaving(true)
 
     try {
-      await api.post('/visits', {
+      const response = await api.post<{ id: number; certificate: Certificate | null }>('/visits', {
         queue_entry_id: queueEntryId,
         complaint,
         blood_pressure: bloodPressure || null,
@@ -111,7 +117,11 @@ export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: 
         referred_to: referredTo || null,
         medicines: dispensed.map((line) => ({ medicine_id: Number(line.medicine_id), quantity: Number(line.quantity) })),
       })
-      onSaved()
+      if (user?.role === 'personnel') {
+        setSavedVisit({ id: response.data.id, certificate: response.data.certificate })
+      } else {
+        onSaved()
+      }
     } catch (err) {
       if (axios.isAxiosError(err) && err.response) {
         const data = err.response.data as { message?: string; errors?: Record<string, string[]> }
@@ -131,6 +141,24 @@ export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: 
         <h2 className="text-lg font-semibold text-slate-900">Visit record — {patientName}</h2>
         <p className="text-xs text-slate-500">{new Date().toLocaleString()}</p>
 
+        {savedVisit ? (
+          <div className="mt-4 space-y-4">
+            <p className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-800">
+              Visit record saved. Issue a medical certificate if the patient needs one.
+            </p>
+            <CertificatePanel
+              visitId={savedVisit.id}
+              certificate={savedVisit.certificate}
+              onIssued={(certificate) => setSavedVisit({ ...savedVisit, certificate })}
+            />
+            <div className="flex justify-end pt-2">
+              <button type="button" onClick={onSaved} className={buttonClass.primary}>
+                Done
+              </button>
+            </div>
+          </div>
+        ) : (
+        <>
         {error && (
           <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
         )}
@@ -309,6 +337,8 @@ export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: 
             </button>
           </div>
         </form>
+        </>
+        )}
       </div>
     </div>
   )

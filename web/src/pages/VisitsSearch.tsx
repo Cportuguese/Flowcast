@@ -1,7 +1,9 @@
 import axios from 'axios'
 import { Fragment, useState, type FormEvent } from 'react'
 import { api } from '../lib/api'
+import { CertificatePanel } from '../components/CertificatePanel'
 import { PageHeader } from '../components/PageHeader'
+import type { Certificate } from '../lib/certificates'
 import { buttonClass } from '../components/Button'
 
 interface Visit {
@@ -10,6 +12,7 @@ interface Visit {
   date: string
   patient: { id: number; name: string; school_id: string | null }
   created_by: string
+  certificate: Certificate | null
   complaint: string
   vitals: { blood_pressure: string | null; temperature: string | null; pulse: number | null; resp_rate: number | null }
   diagnosis: string
@@ -154,6 +157,17 @@ export function VisitsSearch() {
                               </p>
                             </div>
                           )}
+                          <div className="sm:col-span-2">
+                            <CertificatePanel
+                              visitId={visit.id}
+                              certificate={visit.certificate}
+                              onIssued={(certificate) =>
+                                setResults((rows) =>
+                                  rows?.map((row) => (row.id === visit.id ? { ...row, certificate } : row)) ?? rows,
+                                )
+                              }
+                            />
+                          </div>
                         </div>
                       </td>
                     </tr>

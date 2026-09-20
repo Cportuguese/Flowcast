@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../lib/api';
+import { openCertificate, type Certificate } from '../lib/certificates';
 
 interface Visit {
   id: number;
@@ -13,6 +14,7 @@ interface Visit {
   treatment: string | null;
   referred_to: string | null;
   created_by: string;
+  certificate: Certificate | null;
 }
 
 function Field({ label, value }: { label: string; value: string }) {
@@ -30,6 +32,7 @@ export default function VisitDetail() {
   const [visit, setVisit] = useState<Visit | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isOpening, setIsOpening] = useState(false);
 
   useEffect(() => {
     api
@@ -38,6 +41,19 @@ export default function VisitDetail() {
       .catch(() => setError('Unable to load this visit record.'))
       .finally(() => setIsLoading(false));
   }, [queueEntryId]);
+
+  async function handleOpenCertificate() {
+    if (!visit?.certificate) return;
+    setError(null);
+    setIsOpening(true);
+    try {
+      await openCertificate(visit.certificate);
+    } catch {
+      setError('Unable to open the certificate. Check your connection and try again.');
+    } finally {
+      setIsOpening(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -78,6 +94,32 @@ export default function VisitDetail() {
             <Field label="Diagnosis" value={visit.diagnosis} />
             <Field label="Treatment" value={visit.treatment ?? '—'} />
             <Field label="Referred to" value={visit.referred_to ?? '—'} />
+
+            {visit.certificate && (
+              <View className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <Text className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Medical certificate
+                </Text>
+                <Text className="mt-1 text-sm font-semibold text-slate-900">
+                  {visit.certificate.certificate_no}
+                  {visit.certificate.rest_days
+                    ? ` · ${visit.certificate.rest_days} rest ${visit.certificate.rest_days === 1 ? 'day' : 'days'}`
+                    : ' · fit to return'}
+                </Text>
+                <Text className="text-xs text-slate-500">Issued by {visit.certificate.issued_by}</Text>
+                <Pressable
+                  onPress={handleOpenCertificate}
+                  disabled={isOpening}
+                  className="mt-4 items-center rounded-lg bg-brand py-3 disabled:opacity-50"
+                >
+                  {isOpening ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Text className="font-semibold text-white">Download certificate</Text>
+                  )}
+                </Pressable>
+              </View>
+            )}
           </>
         )}
       </View>

@@ -52,7 +52,7 @@ Patient on **web**: `/dashboard` shows a "Flowcast for patients lives in the mob
 [TvBoard.tsx](web/src/pages/TvBoard.tsx): **zero buttons**. Shows "Now Serving #N" and "Up Next" (10 numbers). Live via public channel `queue-board.{date}`, chime on `ticket.called`. Data is numbers + status only (no names) — correct for a public screen.
 
 ### Not in the system (but referenced in memory)
-- **Medical certificate generation** — no endpoint, no button anywhere (`grep certificat` → 0 hits). Deferred at Phase 4. Intended rule (from project memory): personnel generate; admin view/download only. Included below as *planned* placeholders, clearly marked.
+- ~~Medical certificate generation~~ — implemented Sep 20, 2026: `POST /visits/{visit}/certificate` (personnel only), `GET …/certificate` + `…/download` (staff any, patient own). Server-rendered PDF ([medical.blade.php](api/resources/views/certificates/medical.blade.php)), one per visit, numbered `MC-YYYY-NNNN`. UI: [CertificatePanel.tsx](web/src/components/CertificatePanel.tsx) in the visit form (post-save step) and Visit Records rows; "Download certificate" on mobile [visit-detail.tsx](mobile/app/visit-detail.tsx).
 
 ### Gaps found during confirmation — all resolved (Sep 20, 2026)
 1. ~~Web has no shared shell~~ → [AppShell.tsx](web/src/components/AppShell.tsx) + [PageHeader.tsx](web/src/components/PageHeader.tsx); routes nested in [App.tsx](web/src/App.tsx).
@@ -159,7 +159,7 @@ Buttons visible: **Call Next** (primary), Register walk-in (outline), Mark Done 
 
 Data sources already exist: `GET /queue/today`, `GET /appointments?date=today`, `GET /analytics/dashboard` (for avg wait), channel `queue.{date}.staff`.
 
-*Planned (not in system):* after Save record, the Visit Form modal gets a **Generate certificate** button — personnel only.
+✅ After Save record, the Visit Form modal shows a **Generate medical certificate** step (rest days + remarks) — personnel only; admin closes straight away.
 
 ### 3.3 ADMIN — Home ("Overview")
 
@@ -190,7 +190,7 @@ Buttons visible: everything Personnel has (via sidebar) **plus** Clinic Settings
 
 Data sources: `GET /analytics/dashboard`, `GET /analytics/volume-forecast?days=7`, `GET /admin/reports/no-show-summary?month`, `GET /admin/schedules`, `GET /admin/event-days`, `GET /admin/audit-logs` (limit to last 5).
 
-*Planned (not in system):* certificates appear in Visit Records rows as **View / Download** only — admin never sees "Generate".
+✅ Certificates appear in Visit Records rows as **Download PDF** for anyone; the issue form shows for personnel only — admin never sees "Generate".
 
 ### 3.4 PATIENT — Mobile home ([(tabs)/index.tsx](mobile/app/(tabs)/index.tsx)) — ✅ implemented Sep 20, 2026
 
@@ -234,7 +234,7 @@ Move from Stack-with-pseudo-tabs to a **3-tab bottom bar** (Expo Router `(tabs)`
 Buttons per tab:
 - **Home**: Check in as walk-in, Check in for my appointment (conditional), Back to check-in (conditional), Book an appointment →, ⚙ (Log out inside).
 - **Appointments**: Book a new appointment (primary), Cancel appointment (row, booked/checked_in only).
-- **Visits**: tap row → detail (read-only). *Planned:* **Download certificate** on visit detail once certificates exist.
+- **Visits**: tap row → detail (read-only). ✅ **Download certificate** on visit detail when one exists (downloads with the bearer token, then opens the OS share sheet).
 
 Fix while redesigning: send `patient_type` + `contact_no` from Register (gap #3).
 
@@ -283,10 +283,10 @@ Additions: clock, live/offline dot (Echo connection state), closed state. Never 
 | Book / Cancel appointment | ✗ | ✗ | ✅ | ✗ |
 | View own visit history | ✗ | ✗ | ✅ | ✗ |
 | Log out | ✅ | ✅ | ✅ | ✗ |
-| *Generate certificate (planned)* | ✗ | ✅ | ✗ | ✗ |
-| *View / Download certificate (planned)* | ✅ | ✅ | ✅ own | ✗ |
+| Generate medical certificate | ✗ | ✅ | ✗ | ✗ |
+| View / Download certificate | ✅ | ✅ | ✅ own | ✗ |
 
-All ✅/✗ in the non-italic rows are **already enforced today** at both API and UI layers. Italic rows do not exist yet.
+All rows are **enforced at both API and UI layers** (certificates added Sep 20, 2026).
 
 ---
 
@@ -305,7 +305,7 @@ All ✅/✗ in the non-italic rows are **already enforced today** at both API an
 3. ~~Small `QueueHistory` page for admin~~ — done with the Part 1 gap fixes.
 4. ~~Mobile tabs + patient home~~ — done: [(tabs)/_layout.tsx](mobile/app/(tabs)/_layout.tsx), [(tabs)/index.tsx](mobile/app/(tabs)/index.tsx) (states A–D, "Now serving" from the public board channel), Log out behind the account icon, [ScreenHeader.tsx](mobile/components/ScreenHeader.tsx). Register fields were done with the Part 1 gaps.
 5. ~~TV board: clock, connection dot, closed state~~ — done: [TvBoard.tsx](web/src/pages/TvBoard.tsx); `GET /queue-board/today` now returns an `hours` block (is_open / today / next_opening) so the public board can show "Clinic closed · Opens Monday at 8:00 AM".
-6. Certificates: separate phase (API first), then the three planned buttons.
+6. ~~Certificates~~ — done (API commit 0a0f3ca + UI).
 
 ## Verification (for this session)
 
