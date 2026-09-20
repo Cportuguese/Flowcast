@@ -192,7 +192,7 @@ Data sources: `GET /analytics/dashboard`, `GET /analytics/volume-forecast?days=7
 
 *Planned (not in system):* certificates appear in Visit Records rows as **View / Download** only — admin never sees "Generate".
 
-### 3.4 PATIENT — Mobile home (redesign of [queue.tsx](mobile/app/queue.tsx))
+### 3.4 PATIENT — Mobile home ([(tabs)/index.tsx](mobile/app/(tabs)/index.tsx)) — ✅ implemented Sep 20, 2026
 
 Move from Stack-with-pseudo-tabs to a **3-tab bottom bar** (Expo Router `(tabs)` group): **Home · Appointments · Visits**. Existing screens map 1:1; `book-appointment` and `visit-detail` stay as stack pushes. "Log out" moves to a small header avatar menu / settings row instead of a floating text link.
 
@@ -303,7 +303,7 @@ All ✅/✗ in the non-italic rows are **already enforced today** at both API an
 1. ~~`AppShell` + `PageHeader` + `StatTile` + `StatusPill` + `Button`~~ — all done (Part 2 complete).
 2. ~~Split `Dashboard.tsx` into role-switched homes~~ — done: [PersonnelHome.tsx](web/src/pages/home/PersonnelHome.tsx), [AdminHome.tsx](web/src/pages/home/AdminHome.tsx), shared [useTodayQueue.ts](web/src/lib/useTodayQueue.ts) + [StatTile.tsx](web/src/components/StatTile.tsx). "Register walk-in" on Home opens `/queue?walkin=1`.
 3. ~~Small `QueueHistory` page for admin~~ — done with the Part 1 gap fixes.
-4. Mobile: `app/(tabs)/` group with `index` (home), `appointments`, `visits`; move Log out to header; send `patient_type`/`contact_no` on register.
+4. ~~Mobile tabs + patient home~~ — done: [(tabs)/_layout.tsx](mobile/app/(tabs)/_layout.tsx), [(tabs)/index.tsx](mobile/app/(tabs)/index.tsx) (states A–D, "Now serving" from the public board channel), Log out behind the account icon, [ScreenHeader.tsx](mobile/components/ScreenHeader.tsx). Register fields were done with the Part 1 gaps.
 5. TV board: clock, connection dot, closed state.
 6. Certificates: separate phase (API first), then the three planned buttons.
 

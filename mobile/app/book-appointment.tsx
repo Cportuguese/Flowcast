@@ -135,13 +135,13 @@ export default function BookAppointment() {
           We'll see you at your scheduled time.
         </Text>
         <Pressable
-          onPress={() => router.replace('/my-appointments')}
+          onPress={() => router.replace('/(tabs)/appointments')}
           className="mt-8 items-center rounded-lg bg-brand px-6 py-3.5"
         >
           <Text className="text-base font-semibold text-white">View my appointments</Text>
         </Pressable>
         <Pressable onPress={() => router.back()} className="mt-4 items-center">
-          <Text className="text-sm text-slate-400">Back to queue</Text>
+          <Text className="text-sm text-slate-400">Back to home</Text>
         </Pressable>
       </View>
     );

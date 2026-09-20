@@ -38,10 +38,8 @@ function RootNavigator() {
 
       <Stack.Protected guard={isSignedIn}>
         <Stack.Screen name="index" />
-        <Stack.Screen name="queue" />
+        <Stack.Screen name="(tabs)" />
         <Stack.Screen name="book-appointment" />
-        <Stack.Screen name="my-appointments" />
-        <Stack.Screen name="visit-history" />
         <Stack.Screen name="visit-detail" />
       </Stack.Protected>
     </Stack>

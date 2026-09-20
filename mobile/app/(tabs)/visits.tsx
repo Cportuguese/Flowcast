@@ -2,7 +2,8 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { api } from '../lib/api';
+import { ScreenHeader } from '../../components/ScreenHeader';
+import { api } from '../../lib/api';
 
 interface VisitSummary {
   id: number;
@@ -52,12 +53,7 @@ export default function VisitHistory() {
       refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
     >
       <View className="px-6">
-        <View className="flex-row items-center justify-between">
-          <Text className="text-2xl font-bold text-slate-900">My Visit History</Text>
-          <Pressable onPress={() => router.back()}>
-            <Text className="text-sm text-slate-400">Close</Text>
-          </Pressable>
-        </View>
+        <ScreenHeader title="Visits" subtitle="Your past clinic visit records" />
 
         {visits.length === 0 && (
           <Text className="mt-8 text-sm text-slate-400">No visits recorded yet.</Text>

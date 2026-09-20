@@ -19,7 +19,7 @@ export default function Index() {
   }
 
   if (user.role === 'patient') {
-    return <Redirect href="/queue" />;
+    return <Redirect href="/(tabs)" />;
   }
 
   async function handleLogout() {

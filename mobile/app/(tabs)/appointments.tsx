@@ -3,7 +3,8 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { api } from '../lib/api';
+import { ScreenHeader } from '../../components/ScreenHeader';
+import { api } from '../../lib/api';
 
 interface Appointment {
   id: number;
@@ -148,12 +149,7 @@ export default function MyAppointments() {
       refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
     >
       <View className="px-6">
-        <View className="flex-row items-center justify-between">
-          <Text className="text-2xl font-bold text-slate-900">My Appointments</Text>
-          <Pressable onPress={() => router.back()}>
-            <Text className="text-sm text-slate-400">Close</Text>
-          </Pressable>
-        </View>
+        <ScreenHeader title="Appointments" subtitle="Book, track, or cancel your clinic visits" />
 
         {error && (
           <Text className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</Text>
