@@ -30,6 +30,7 @@ class RegisterTest extends TestCase
             ->assertJsonMissingPath('user.password');
 
         $this->assertDatabaseHas('users', ['email' => 'pat@example.com', 'role' => 'patient']);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'auth.registered', 'model_type' => 'User']);
     }
 
     public function test_registration_ignores_a_submitted_role(): void

@@ -36,6 +36,7 @@ class StaffAccountTest extends TestCase
         ])->assertSuccessful();
 
         $this->assertDatabaseHas('users', ['email' => 'doc@example.com', 'role' => 'admin', 'name' => 'Dr. Doc']);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'staff.created', 'model_type' => 'User', 'user_id' => null]);
 
         $this->postJson('/api/login', ['email' => 'doc@example.com', 'password' => 'Secret-Pass-123'])
             ->assertOk()

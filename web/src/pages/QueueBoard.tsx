@@ -31,6 +31,7 @@ export function QueueBoard() {
   const [searchParams] = useSearchParams()
 
   const [statusFilter, setStatusFilter] = useState<'all' | QueueEntry['status']>('all')
+  const [search, setSearch] = useState('')
   const [visitFormEntry, setVisitFormEntry] = useState<QueueEntry | null>(null)
 
   const [showWalkInForm, setShowWalkInForm] = useState(() => searchParams.get('walkin') === '1')
@@ -61,7 +62,12 @@ export function QueueBoard() {
     }
   }
 
-  const visibleEntries = statusFilter === 'all' ? entries : entries.filter((e) => e.status === statusFilter)
+  const needle = search.trim().toLowerCase()
+  const visibleEntries = entries.filter(
+    (e) =>
+      (statusFilter === 'all' || e.status === statusFilter) &&
+      (!needle || e.patient.name.toLowerCase().includes(needle) || String(e.queue_number) === needle),
+  )
 
   return (
     <>
@@ -69,7 +75,7 @@ export function QueueBoard() {
         <PageHeader title="Live Queue" subtitle={date ?? '—'} />
 
         {actionError && (
-          <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{actionError}</p>
+          <p role="alert" className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{actionError}</p>
         )}
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -140,7 +146,7 @@ export function QueueBoard() {
                 <option value="">—</option>
                 <option value="student">Student</option>
                 <option value="faculty">Faculty</option>
-                <option value="staff">Staff</option>
+                <option value="staff">School Employee</option>
               </select>
             </div>
             <div className="flex items-end">
@@ -155,7 +161,7 @@ export function QueueBoard() {
           </form>
         )}
 
-        <div className="mt-6 flex gap-1 border-b border-slate-200">
+        <div className="mt-6 flex flex-wrap items-end gap-1 border-b border-slate-200">
           {(['all', 'waiting', 'in_consultation', 'done', 'skipped'] as const).map((tab) => (
             <button
               key={tab}
@@ -170,10 +176,18 @@ export function QueueBoard() {
               {tab === 'all' ? 'All' : QUEUE_STATUS_LABELS[tab]}
             </button>
           ))}
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Find by name or #"
+            aria-label="Find patient by name or queue number"
+            className="mb-1.5 ml-auto w-48 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+          />
         </div>
 
-        <div className="overflow-hidden rounded-b-lg rounded-tr-lg border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto rounded-b-lg rounded-tr-lg border border-slate-200 bg-white shadow-sm">
+          <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
                 <th className="px-4 py-3">#</th>
@@ -196,7 +210,7 @@ export function QueueBoard() {
               {!isLoading && visibleEntries.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
-                    {entries.length === 0 ? 'No one has checked in today yet.' : 'No entries match this filter.'}
+                    {entries.length === 0 ? 'No one has checked in today yet.' : 'No entries match this search.'}
                   </td>
                 </tr>
               )}

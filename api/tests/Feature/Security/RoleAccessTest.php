@@ -10,6 +10,7 @@ use App\Models\QueueEntry;
 use App\Models\User;
 use App\Models\VisitRecord;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -22,6 +23,15 @@ use Tests\TestCase;
 class RoleAccessTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // The allowed-role calls really run (e.g. issuing a certificate
+        // renders a PDF); keep that off the real disk.
+        Storage::fake('local');
+    }
 
     private const ALL = ['admin', 'personnel', 'patient'];
 
@@ -37,6 +47,7 @@ class RoleAccessTest extends TestCase
             'logout' => ['POST', '/api/logout', self::ALL],
             'user' => ['GET', '/api/user', self::ALL],
             'push-token' => ['PATCH', '/api/user/push-token', self::ALL],
+            'password' => ['PATCH', '/api/user/password', self::ALL],
             'admin ping' => ['GET', '/api/admin/ping', ['admin']],
             'personnel ping' => ['GET', '/api/personnel/ping', self::STAFF],
 
@@ -78,6 +89,8 @@ class RoleAccessTest extends TestCase
             'analytics volume-forecast' => ['GET', '/api/analytics/volume-forecast', self::STAFF],
             'analytics wait-time-forecast' => ['GET', '/api/analytics/wait-time-forecast', self::STAFF],
             'analytics peak-hours' => ['GET', '/api/analytics/peak-hours', self::STAFF],
+            'analytics staffing-what-if' => ['GET', '/api/analytics/staffing-what-if', self::STAFF],
+            'analytics model-performance' => ['GET', '/api/analytics/model-performance', ['admin']],
             'audit-logs index' => ['GET', '/api/admin/audit-logs', ['admin']],
             'reports queue-summary' => ['GET', '/api/admin/reports/queue-summary', ['admin']],
             'reports visit-summary' => ['GET', '/api/admin/reports/visit-summary', ['admin']],

@@ -285,8 +285,9 @@ Additions: clock, live/offline dot (Echo connection state), closed state. Never 
 | Log out | ✅ | ✅ | ✅ | ✗ |
 | Generate medical certificate | ✗ | ✅ | ✗ | ✗ |
 | View / Download certificate | ✅ | ✅ | ✅ own | ✗ |
+| Change own password | ✅ | ✅ | ✅ | ✗ |
 
-All rows are **enforced at both API and UI layers** (certificates added Sep 20, 2026).
+All rows are **enforced at both API and UI layers** (certificates and password change added Sep 20, 2026). Password change lives at web `/account` (sidebar footer) and the mobile Home account menu; it revokes every other session.
 
 ---
 

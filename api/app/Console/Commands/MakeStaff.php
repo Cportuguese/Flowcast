@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\User;
+use App\Services\AuditLogger;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
@@ -57,6 +58,13 @@ class MakeStaff extends Command
         ]);
         $user->role = $input['role'];
         $user->save();
+
+        // No request user on the CLI, so the actor is null; the row itself
+        // records who was created and with which role.
+        app(AuditLogger::class)->log(null, 'staff.created', $user, [
+            'email' => $user->email,
+            'role' => $user->role,
+        ]);
 
         $this->info("Created {$user->role} account for {$user->email} (id {$user->id}).");
 

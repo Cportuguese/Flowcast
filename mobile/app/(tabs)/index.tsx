@@ -13,9 +13,11 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { OfflineNotice } from '../../components/OfflineNotice';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../lib/api';
+import { fetchWithCache, isNetworkError } from '../../lib/cache';
 import { getEcho } from '../../lib/echo';
 import { registerForQueuePushNotifications } from '../../lib/notifications';
 
@@ -45,6 +47,8 @@ interface QueuePayload {
   position: number | null;
   people_ahead: number | null;
   estimated_wait_minutes: number | null;
+  estimated_wait_low: number | null;
+  estimated_wait_high: number | null;
 }
 
 const RESOLVED_COPY: Record<'done' | 'skipped', { title: string; subtitle: string }> = {
@@ -64,6 +68,21 @@ function formatDay(iso: string) {
   return new Date(iso).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+/**
+ * A single number implies a precision the estimate does not have, so show
+ * the p10-p90 range the model actually produced and keep the point estimate
+ * only when there is no range to show.
+ */
+function formatWaitEstimate(minutes: number | null, range: { low: number; high: number } | null) {
+  if (range && range.high > range.low) {
+    return `~${range.low}–${range.high} min`;
+  }
+  if (minutes !== null) {
+    return `~${minutes} min`;
+  }
+  return 'Calculating wait…';
+}
+
 function isToday(iso: string) {
   return new Date(iso).toDateString() === new Date().toDateString();
 }
@@ -74,9 +93,12 @@ export default function Home() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [entry, setEntry] = useState<QueueEntry | null>(null);
+  // null = online; { since } = showing a cached copy (since null = nothing cached).
+  const [offline, setOffline] = useState<{ since: string | null } | null>(null);
   const [position, setPosition] = useState<number | null>(null);
   const [peopleAhead, setPeopleAhead] = useState<number | null>(null);
   const [estimatedWaitMinutes, setEstimatedWaitMinutes] = useState<number | null>(null);
+  const [waitRange, setWaitRange] = useState<{ low: number; high: number } | null>(null);
   const [nowServing, setNowServing] = useState<number | null>(null);
   const [upcoming, setUpcoming] = useState<Appointment[]>([]);
   const [isCheckingIn, setIsCheckingIn] = useState(false);
@@ -89,17 +111,35 @@ export default function Home() {
     setPosition(data.position ?? null);
     setPeopleAhead(data.people_ahead ?? null);
     setEstimatedWaitMinutes(data.estimated_wait_minutes ?? null);
+    setWaitRange(
+      data.estimated_wait_low != null && data.estimated_wait_high != null
+        ? { low: data.estimated_wait_low, high: data.estimated_wait_high }
+        : null,
+    );
   }, []);
 
   const loadMine = useCallback(async () => {
-    const response = await api.get<QueuePayload>('/queue/mine');
-    applyQueue(response.data);
+    try {
+      const { data, offlineSince } = await fetchWithCache('queue-mine', async () => {
+        const response = await api.get<QueuePayload>('/queue/mine');
+        return response.data;
+      });
+      applyQueue(data);
+      setOffline(offlineSince ? { since: offlineSince } : null);
+    } catch (err) {
+      // No signal and nothing cached: leave whatever is on screen and say so.
+      // A 401 is handled by the api interceptor; anything else is transient.
+      if (isNetworkError(err)) setOffline({ since: null });
+    }
   }, [applyQueue]);
 
   const loadAppointments = useCallback(async () => {
     try {
-      const response = await api.get<{ upcoming: Appointment[] }>('/appointments/mine');
-      setUpcoming(response.data.upcoming.filter((a) => a.status === 'booked'));
+      const { data } = await fetchWithCache('appointments-upcoming', async () => {
+        const response = await api.get<{ upcoming: Appointment[] }>('/appointments/mine');
+        return response.data.upcoming.filter((a) => a.status === 'booked');
+      });
+      setUpcoming(data);
     } catch {
       setUpcoming([]);
     }
@@ -185,6 +225,7 @@ export default function Home() {
   function openAccountMenu() {
     Alert.alert(user?.name ?? 'Account', user?.email, [
       { text: 'Cancel', style: 'cancel' },
+      { text: 'Change password', onPress: () => router.push('/change-password') },
       {
         text: 'Log out',
         style: 'destructive',
@@ -226,6 +267,8 @@ export default function Home() {
             </Pressable>
           }
         />
+
+        {offline && <OfflineNotice since={offline.since} />}
 
         {error && (
           <Text className="mt-6 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</Text>
@@ -284,9 +327,14 @@ export default function Home() {
                     {peopleAhead === 0 ? 'Please stay close by' : `people ahead of you`}
                   </Text>
                   <Text className="mt-2 text-xs text-slate-400">
-                    {estimatedWaitMinutes ? `~${estimatedWaitMinutes} min` : 'Calculating wait…'}
+                    {formatWaitEstimate(estimatedWaitMinutes, waitRange)}
                     {position !== null && ` · Position #${position}`}
                   </Text>
+                  {waitRange !== null && (
+                    <Text className="mt-1 text-center text-xs text-slate-400">
+                      based on the current queue and today's pace
+                    </Text>
+                  )}
                 </>
               )}
             </View>

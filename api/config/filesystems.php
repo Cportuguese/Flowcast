@@ -33,7 +33,14 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            // Medical certificates live on this disk. `serve => true` would
+            // register unauthenticated GET/PUT /storage/{path} routes (they
+            // demand a signed URL, so they are not a hole — but nothing here
+            // issues such URLs, so the routes are pure attack surface).
+            // Certificates are only ever served through
+            // GET /api/visits/{visit}/certificate/download, which checks
+            // ownership and writes an audit entry.
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],

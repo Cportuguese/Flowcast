@@ -6,24 +6,34 @@ use App\Http\Controllers\Controller;
 use App\Models\AnalyticsSnapshot;
 use App\Models\ClinicSchedule;
 use App\Models\EventDay;
+use App\Models\MlModel;
 use App\Models\QueueEntry;
+use App\Services\Ml\ModelEvaluator;
+use App\Services\Ml\TrainedModel;
+use App\Services\Ml\VolumePredictor;
+use App\Services\Ml\WaitTimePredictor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 class AnalyticsController extends Controller
 {
-    /** Multiplier applied to a forecast when the target date is a flagged event day. */
-    private const EVENT_DAY_FACTOR = 1.5;
-
-    /** How many same-weekday occurrences feed a forecast, most recent weighted highest. */
-    private const LOOKBACK_WEEKS = 8;
-
     /** Hard cap on how far back history queries scan. */
     private const LOOKBACK_CAP_WEEKS = 26;
 
     /** Trailing window shown on the volume/wait-time trend charts. */
     private const TREND_DAYS = 28;
+
+    /** How far back the online predicted-vs-actual comparison looks. */
+    private const ONLINE_WINDOW_DAYS = 30;
+
+    /** Personnel counts offered by the staffing what-if. */
+    private const WHAT_IF_STAFF_LEVELS = [1, 2, 3];
+
+    public function __construct(
+        private readonly VolumePredictor $volumePredictor,
+        private readonly WaitTimePredictor $waitTimePredictor,
+    ) {}
 
     public function dashboard()
     {
@@ -50,7 +60,7 @@ class AnalyticsController extends Controller
                 'currently_waiting' => $entries->where('status', 'waiting')->count(),
                 'completed_today' => $entries->where('status', 'done')->count(),
             ],
-            'upcoming_hours' => $this->upcomingHours($today, $entries),
+            'upcoming_hours' => $this->upcomingHours($today),
         ]);
     }
 
@@ -81,17 +91,24 @@ class AnalyticsController extends Controller
 
         for ($i = 1; $i <= $days; $i++) {
             $date = Carbon::today()->addDays($i);
-            $forecast = $this->predictedArrivalsForDate($date);
+            $forecast = $this->volumePredictor->predict($date);
 
             $series[] = [
                 'date' => $date->toDateString(),
                 'type' => 'forecast',
                 'predicted_arrivals' => $forecast['predicted_arrivals'],
+                'low' => $forecast['low'],
+                'high' => $forecast['high'],
                 'is_event_day' => $forecast['is_event_day'],
+                'source' => $forecast['source'],
             ];
         }
 
-        return response()->json(['days' => $days, 'series' => $series]);
+        return response()->json([
+            'days' => $days,
+            'series' => $series,
+            'model' => $this->modelSummary(MlModel::KEY_VOLUME),
+        ]);
     }
 
     public function waitTimeForecast(Request $request)
@@ -173,7 +190,7 @@ class AnalyticsController extends Controller
             ]);
         }
 
-        $forecast = $this->predictedArrivalsForDate($date);
+        $forecast = $this->volumePredictor->predict($date);
         $shares = $this->hourlySharesForWeekday($date->dayOfWeek);
 
         $hours = collect($shares)
@@ -193,9 +210,170 @@ class AnalyticsController extends Controller
     }
 
     /**
-     * @return array<int, array{hour: int, label: string, predicted_arrivals: int, estimated_wait_minutes: int}>
+     * Accuracy and interpretation of the active models, for the admin
+     * analytics page. Admin-only: it exposes how the clinic is staffed and
+     * how it performs, which is management information rather than
+     * operational data.
      */
-    private function upcomingHours(Carbon $today, Collection $todayEntries): array
+    public function modelPerformance()
+    {
+        return response()->json([
+            'wait_time' => $this->modelDetail(MlModel::KEY_WAIT_TIME),
+            'volume' => $this->modelDetail(MlModel::KEY_VOLUME),
+            'online' => $this->onlineAccuracy(),
+        ]);
+    }
+
+    /**
+     * Predicted wait for someone joining the queue now, at each possible
+     * personnel count.
+     *
+     * Because the number of personnel on duty is a model input rather than
+     * something inferred after the fact, asking "what if a second nurse
+     * were on" costs nothing extra — it is the same model queried with one
+     * feature changed.
+     */
+    public function staffingWhatIf(Request $request)
+    {
+        $validated = $request->validate([
+            'people_ahead' => ['nullable', 'integer', 'between:0,200'],
+        ]);
+
+        $today = Carbon::today();
+        $peopleAhead = $validated['people_ahead'] ?? QueueEntry::where('queue_date', $today)
+            ->where('status', 'waiting')
+            ->count();
+
+        $scenarios = [];
+
+        foreach (self::WHAT_IF_STAFF_LEVELS as $staff) {
+            $estimate = $this->waitTimePredictor->predict($today, $peopleAhead, staffOverride: $staff);
+
+            $scenarios[] = [
+                'active_staff' => $staff,
+                'estimated_wait_minutes' => $estimate['minutes'],
+                'estimated_wait_low' => $estimate['low'],
+                'estimated_wait_high' => $estimate['high'],
+            ];
+        }
+
+        return response()->json([
+            'date' => $today->toDateString(),
+            'people_ahead' => $peopleAhead,
+            'source' => $scenarios === [] ? null : $this->waitTimePredictor->predict($today, $peopleAhead)['source'],
+            'scenarios' => $scenarios,
+        ]);
+    }
+
+    /**
+     * Short provenance stamp attached to forecast responses so a chart can
+     * say whether it is showing a trained model or the fallback heuristic.
+     *
+     * @return array{is_trained: bool, version: int|null, trained_at: string|null, mae: float|null, baseline_mae: float|null}
+     */
+    private function modelSummary(string $key): array
+    {
+        $model = MlModel::active($key);
+
+        return [
+            'is_trained' => $model !== null,
+            'version' => $model?->version,
+            'trained_at' => $model?->trained_at?->toIso8601String(),
+            'mae' => $model?->metrics['mae'] ?? null,
+            'baseline_mae' => $model?->metrics['baseline_mae'] ?? null,
+        ];
+    }
+
+    /**
+     * Everything the model-performance card shows for one model: how it was
+     * fitted, how it scored against the heuristic it replaced, and which
+     * features carry the weight.
+     *
+     * Returns a populated shape with nulls rather than an empty object when
+     * nothing has been trained yet, so the page renders an honest "not
+     * trained" state instead of breaking.
+     *
+     * @return array<string, mixed>
+     */
+    private function modelDetail(string $key): array
+    {
+        $model = MlModel::active($key);
+
+        if (! $model) {
+            return [
+                'is_trained' => false,
+                'version' => null,
+                'trained_at' => null,
+                'algorithm' => null,
+                'lambda' => null,
+                'training_rows' => 0,
+                'holdout_rows' => 0,
+                'metrics' => null,
+                'feature_importances' => [],
+            ];
+        }
+
+        return [
+            'is_trained' => true,
+            'version' => $model->version,
+            'trained_at' => $model->trained_at->toIso8601String(),
+            'algorithm' => $model->algorithm,
+            'lambda' => $model->lambda,
+            'training_rows' => $model->training_rows,
+            'holdout_rows' => $model->holdout_rows,
+            'metrics' => $model->metrics,
+            'feature_importances' => TrainedModel::fromModel($model)->featureImportances(),
+        ];
+    }
+
+    /**
+     * Predicted-vs-actual for the estimates actually shown to patients.
+     *
+     * These come from `queue_entries.predicted_wait_minutes`, written when
+     * the patient joined, so they are genuinely out of sample — unlike a
+     * holdout, which is reconstructed after the fact. The list is empty
+     * until real check-ins have happened under a trained model.
+     *
+     * @return array{window_days: int, points: array<int, array{date: string, queue_number: int, predicted: int, actual: int}>, metrics: array<string, float|int|null>}
+     */
+    private function onlineAccuracy(): array
+    {
+        $entries = QueueEntry::query()
+            ->whereNotNull('predicted_wait_minutes')
+            ->whereNotNull('called_at')
+            ->where('queue_date', '>=', Carbon::today()->subDays(self::ONLINE_WINDOW_DAYS)->toDateString())
+            ->orderBy('queue_date')
+            ->orderBy('queue_number')
+            ->get();
+
+        $points = $entries->map(fn (QueueEntry $entry) => [
+            'date' => Carbon::parse($entry->queue_date)->toDateString(),
+            'queue_number' => $entry->queue_number,
+            'predicted' => (int) $entry->predicted_wait_minutes,
+            'actual' => (int) round($entry->joined_at->diffInMinutes($entry->called_at)),
+        ])->values();
+
+        return [
+            'window_days' => self::ONLINE_WINDOW_DAYS,
+            'points' => $points->all(),
+            'metrics' => ModelEvaluator::metrics(
+                $points->pluck('actual')->map(fn (int $value): float => (float) $value)->all(),
+                $points->pluck('predicted')->map(fn (int $value): float => (float) $value)->all(),
+            ),
+        ];
+    }
+
+    /**
+     * Per-hour arrival forecast for the rest of today, each with the wait a
+     * patient arriving in that hour should expect.
+     *
+     * The wait now comes from the model rather than arrivals x mean consult
+     * time, so it reflects how many personnel are on duty and where in the
+     * day the hour falls — the two things the old multiplication ignored.
+     *
+     * @return array<int, array{hour: int, label: string, predicted_arrivals: int, estimated_wait_minutes: int, estimated_wait_low: int, estimated_wait_high: int}>
+     */
+    private function upcomingHours(Carbon $today): array
     {
         $schedule = ClinicSchedule::where('day_of_week', $today->dayOfWeek)->where('is_active', true)->first();
 
@@ -204,43 +382,30 @@ class AnalyticsController extends Controller
         }
 
         $endHour = (int) Carbon::parse($schedule->end_time)->format('H');
-        $predictedTotal = $this->predictedArrivalsForDate($today)['predicted_arrivals'];
+        $predictedTotal = $this->volumePredictor->predict($today)['predicted_arrivals'];
         $shares = $this->hourlySharesForWeekday($today->dayOfWeek);
-        $avgConsult = $this->fallbackAvgConsultMinutes($todayEntries);
 
         $upcoming = [];
 
         for ($hour = Carbon::now()->hour + 1; $hour < $endHour; $hour++) {
             $predictedArrivals = (int) round($predictedTotal * ($shares[$hour] ?? 0));
+            $estimate = $this->waitTimePredictor->predict(
+                $today,
+                $predictedArrivals,
+                at: $today->copy()->setTime($hour, 0),
+            );
 
             $upcoming[] = [
                 'hour' => $hour,
                 'label' => Carbon::createFromTime($hour)->format('g A'),
                 'predicted_arrivals' => $predictedArrivals,
-                'estimated_wait_minutes' => (int) round($predictedArrivals * $avgConsult),
+                'estimated_wait_minutes' => $estimate['minutes'],
+                'estimated_wait_low' => $estimate['low'],
+                'estimated_wait_high' => $estimate['high'],
             ];
         }
 
         return $upcoming;
-    }
-
-    /**
-     * Today's completed-entry average consult time, falling back to the
-     * trailing trend window, then a flat default before any data exists.
-     */
-    private function fallbackAvgConsultMinutes(Collection $todayEntries): float
-    {
-        $completedToday = $todayEntries->filter(fn (QueueEntry $entry) => $entry->called_at && $entry->completed_at);
-
-        if ($completedToday->isNotEmpty()) {
-            return max($completedToday->avg(fn (QueueEntry $entry) => $entry->called_at->diffInMinutes($entry->completed_at)), 1);
-        }
-
-        $trailing = AnalyticsSnapshot::where('date', '>=', Carbon::today()->subDays(self::TREND_DAYS)->toDateString())
-            ->whereNotNull('avg_consult_time')
-            ->avg('avg_consult_time');
-
-        return $trailing ? max($trailing, 1) : 5;
     }
 
     /**
@@ -269,91 +434,18 @@ class AnalyticsController extends Controller
         $base = $weighted / $weightSum;
         $isEventDay = EventDay::whereDate('date', Carbon::today())->exists();
 
-        return (int) round($isEventDay ? $base * self::EVENT_DAY_FACTOR : $base);
-    }
-
-    /**
-     * Weighted-average forecast for a single date: recent same-weekday totals
-     * (most recent weighted highest), falling back to any recent day when too
-     * little weekday-specific history exists, times the event-day factor.
-     *
-     * @return array{predicted_arrivals: int, is_event_day: bool}
-     */
-    private function predictedArrivalsForDate(Carbon $date): array
-    {
-        $isEventDay = EventDay::whereDate('date', $date)->exists();
-        $sameWeekdayDates = $this->recentDatesForWeekday($date, $date->dayOfWeek, self::LOOKBACK_WEEKS);
-
-        if ($sameWeekdayDates->count() >= 2) {
-            $totals = $this->dailyTotals($sameWeekdayDates);
-
-            $weightSum = 0;
-            $weighted = 0;
-
-            foreach ($sameWeekdayDates->values() as $i => $d) {
-                $weight = 1 / ($i + 1);
-                $weighted += ($totals[$d->toDateString()] ?? 0) * $weight;
-                $weightSum += $weight;
-            }
-
-            $base = $weightSum > 0 ? $weighted / $weightSum : 0;
-        } else {
-            $anyDates = AnalyticsSnapshot::where('date', '>=', $date->copy()->subDays(self::TREND_DAYS)->toDateString())
-                ->where('date', '<', $date->toDateString())
-                ->select('date')->distinct()->get()
-                ->pluck('date')->map(fn (string $d) => Carbon::parse($d));
-
-            $totals = $this->dailyTotals($anyDates);
-            $base = $totals->isEmpty() ? 0 : $totals->avg();
-        }
-
-        $predicted = $isEventDay ? $base * self::EVENT_DAY_FACTOR : $base;
-
-        return [
-            'predicted_arrivals' => (int) round(max($predicted, 0)),
-            'is_event_day' => $isEventDay,
-        ];
-    }
-
-    /**
-     * Distinct past dates (before $before, capped to LOOKBACK_CAP_WEEKS back)
-     * matching $dayOfWeek, most recent first.
-     *
-     * @return Collection<int, Carbon>
-     */
-    private function recentDatesForWeekday(Carbon $before, int $dayOfWeek, int $limit): Collection
-    {
-        return AnalyticsSnapshot::where('date', '>=', $before->copy()->subWeeks(self::LOOKBACK_CAP_WEEKS)->toDateString())
-            ->where('date', '<', $before->toDateString())
-            ->select('date')->distinct()->get()
-            ->pluck('date')
-            ->map(fn (string $d) => Carbon::parse($d))
-            ->filter(fn (Carbon $d) => $d->dayOfWeek === $dayOfWeek)
-            ->sortByDesc(fn (Carbon $d) => $d->toDateString())
-            ->take($limit)
-            ->values();
-    }
-
-    /**
-     * @param  Collection<int, Carbon>  $dates
-     * @return Collection<string, int> date string => summed arrival_count
-     */
-    private function dailyTotals(Collection $dates): Collection
-    {
-        if ($dates->isEmpty()) {
-            return collect();
-        }
-
-        return AnalyticsSnapshot::whereIn('date', $dates->map(fn (Carbon $d) => $d->toDateString()))
-            ->selectRaw('date, SUM(arrival_count) as total')
-            ->groupBy('date')
-            ->pluck('total', 'date');
+        return (int) round($isEventDay ? $base * VolumePredictor::EVENT_DAY_FACTOR : $base);
     }
 
     /**
      * Average, per hour, of that hour's share of the day's total arrivals —
      * across recent same-weekday dates. Used to split a day-level forecast
      * into an hourly breakdown.
+     *
+     * Shares are Laplace-smoothed: every hour is counted as if it had been
+     * observed once more than it was. With thin history a single freak hour
+     * would otherwise claim most of a day's forecast, and an hour that
+     * happened to see nobody would be predicted to stay empty forever.
      *
      * @return array<int, float> hour => share (0..1)
      */
@@ -373,7 +465,8 @@ class AnalyticsController extends Controller
             ->get()
             ->groupBy(fn (AnalyticsSnapshot $row) => $row->date);
 
-        $hourShares = [];
+        $counts = [];
+        $days = 0;
 
         foreach ($byDate as $dateRows) {
             $total = $dateRows->sum('arrival_count');
@@ -382,12 +475,23 @@ class AnalyticsController extends Controller
                 continue;
             }
 
+            $days++;
+
             foreach ($dateRows as $row) {
-                $hourShares[$row->hour][] = $row->arrival_count / $total;
+                $counts[$row->hour] = ($counts[$row->hour] ?? 0) + $row->arrival_count;
             }
         }
 
-        return collect($hourShares)->map(fn (array $shares) => array_sum($shares) / count($shares))->all();
+        if ($counts === [] || $days === 0) {
+            return [];
+        }
+
+        $hours = count($counts);
+        $smoothedTotal = array_sum($counts) + $hours;
+
+        return collect($counts)
+            ->map(fn (int $count): float => ($count + 1) / $smoothedTotal)
+            ->all();
     }
 
     /**

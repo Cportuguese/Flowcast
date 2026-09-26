@@ -30,9 +30,20 @@ export async function openCertificate(certificate: Certificate) {
     { idempotent: true, headers: { Authorization: `Bearer ${token}`, Accept: 'application/pdf' } },
   );
 
-  await Sharing.shareAsync(file.uri, {
-    mimeType: 'application/pdf',
-    UTI: 'com.adobe.pdf',
-    dialogTitle: `Medical certificate ${certificate.certificate_no}`,
-  });
+  try {
+    await Sharing.shareAsync(file.uri, {
+      mimeType: 'application/pdf',
+      UTI: 'com.adobe.pdf',
+      dialogTitle: `Medical certificate ${certificate.certificate_no}`,
+    });
+  } finally {
+    // It's a medical document: don't leave a copy in the app cache once the
+    // share sheet has closed. Whatever the user chose ("save", "open in")
+    // already has its own copy by now.
+    try {
+      file.delete();
+    } catch {
+      // Best effort — the OS may already have cleaned it up.
+    }
+  }
 }

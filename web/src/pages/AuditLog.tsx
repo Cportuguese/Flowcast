@@ -62,24 +62,24 @@ export function AuditLog() {
 
       <form onSubmit={handleSearch} className="mt-6 flex flex-wrap items-end gap-3">
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">From</label>
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          <label htmlFor="audit-from" className="mb-1 block text-xs font-medium text-slate-700">From</label>
+          <input id="audit-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">To</label>
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          <label htmlFor="audit-to" className="mb-1 block text-xs font-medium text-slate-700">To</label>
+          <input id="audit-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">User ID</label>
-          <input value={userId} onChange={(e) => setUserId(e.target.value)} className="w-24 rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          <label htmlFor="audit-user-id" className="mb-1 block text-xs font-medium text-slate-700">User ID</label>
+          <input id="audit-user-id" value={userId} onChange={(e) => setUserId(e.target.value)} className="w-24 rounded-lg border border-slate-300 px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">Action</label>
-          <input placeholder="e.g. queue" value={action} onChange={(e) => setAction(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          <label htmlFor="audit-action" className="mb-1 block text-xs font-medium text-slate-700">Action</label>
+          <input id="audit-action" placeholder="e.g. queue" value={action} onChange={(e) => setAction(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">Patient (ID or name)</label>
-          <input value={patient} onChange={(e) => setPatient(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          <label htmlFor="audit-patient" className="mb-1 block text-xs font-medium text-slate-700">Patient (ID or name)</label>
+          <input id="audit-patient" value={patient} onChange={(e) => setPatient(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
         </div>
         <button
           type="submit"
@@ -90,11 +90,11 @@ export function AuditLog() {
         </button>
       </form>
 
-      {error && <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
       {results && (
-        <div className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-left text-sm">
+        <div className="mt-6 overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+          <table className="w-full min-w-[560px] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
                 <th className="px-4 py-3">Date/Time</th>

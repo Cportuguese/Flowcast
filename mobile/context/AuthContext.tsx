@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api, clearToken, getToken, onUnauthorized, setToken } from '../lib/api';
+import { clearCache, isNetworkError, readCache, writeCache } from '../lib/cache';
 import { disconnectEcho } from '../lib/echo';
 
 export type PatientType = 'student' | 'faculty' | 'staff';
@@ -38,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     onUnauthorized(() => {
       disconnectEcho();
+      void clearCache();
       setUser(null);
     });
   }, []);
@@ -52,8 +54,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const response = await api.get<User>('/user');
         setUser(response.data);
-      } catch {
-        await clearToken().catch(() => {});
+        void writeCache('user', response.data);
+      } catch (err) {
+        // No signal: the token may well be fine, so open with the last-known
+        // profile and let the screens show their cached copies. Any real
+        // rejection (401 etc.) still signs the device out.
+        const cached = isNetworkError(err) ? await readCache<User>('user') : null;
+        if (cached) {
+          setUser(cached.data);
+        } else {
+          await clearToken().catch(() => {});
+        }
       } finally {
         setIsLoading(false);
       }
@@ -71,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     disconnectEcho();
     await setToken(response.data.token);
     setUser(response.data.user);
+    void writeCache('user', response.data.user);
   }
 
   async function register(params: {
@@ -88,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     disconnectEcho();
     await setToken(response.data.token);
     setUser(response.data.user);
+    void writeCache('user', response.data.user);
   }
 
   async function logout() {
@@ -96,6 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       disconnectEcho();
       await clearToken();
+      await clearCache();
       setUser(null);
     }
   }

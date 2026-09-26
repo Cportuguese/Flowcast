@@ -63,16 +63,16 @@ export function VisitsSearch() {
 
       <form onSubmit={handleSearch} className="mt-6 flex flex-wrap items-end gap-3">
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">School ID</label>
-          <input
+          <label htmlFor="visits-school-id" className="mb-1 block text-xs font-medium text-slate-700">School ID</label>
+          <input id="visits-school-id"
             value={schoolId}
             onChange={(e) => setSchoolId(e.target.value)}
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">Date</label>
-          <input
+          <label htmlFor="visits-date" className="mb-1 block text-xs font-medium text-slate-700">Date</label>
+          <input id="visits-date"
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
@@ -89,12 +89,12 @@ export function VisitsSearch() {
       </form>
 
       {error && (
-        <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+        <p role="alert" className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
       )}
 
       {results && (
-        <div className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-left text-sm">
+        <div className="mt-6 overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+          <table className="w-full min-w-[560px] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
                 <th className="px-4 py-3">Date</th>

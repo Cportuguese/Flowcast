@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['queue_number', 'queue_date', 'patient_id', 'source', 'status', 'appointment_id', 'handled_by_id', 'joined_at', 'called_at', 'near_call_notified_at', 'completed_at'])]
+#[Fillable(['queue_number', 'queue_date', 'patient_id', 'source', 'status', 'appointment_id', 'handled_by_id', 'joined_at', 'called_at', 'near_call_notified_at', 'completed_at', 'predicted_wait_minutes', 'prediction_model_version'])]
 class QueueEntry extends Model
 {
     use HasFactory;
@@ -20,6 +20,8 @@ class QueueEntry extends Model
             'called_at' => 'datetime',
             'near_call_notified_at' => 'datetime',
             'completed_at' => 'datetime',
+            'predicted_wait_minutes' => 'integer',
+            'prediction_model_version' => 'integer',
         ];
     }
 

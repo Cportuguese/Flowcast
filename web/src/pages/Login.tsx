@@ -42,7 +42,7 @@ export function Login() {
 
       <form onSubmit={handleSubmit} className="mt-10 space-y-6">
         {error && (
-          <p className="rounded-lg bg-red-50 px-4 py-3 text-center text-sm text-red-700">
+          <p role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-center text-sm text-red-700">
             {error}
           </p>
         )}

@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../lib/api'
 import { PageHeader } from '../components/PageHeader'
 import { buttonClass } from '../components/Button'
+import { useToast } from '../components/Toast'
 
 interface ClinicSchedule {
   id: number
@@ -50,7 +51,7 @@ function extractErrorMessage(err: unknown, fallback: string) {
 }
 
 export function AdminSettings() {
-
+  const toast = useToast()
   const [forms, setForms] = useState<Record<number, DayForm>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [savingDay, setSavingDay] = useState<number | null>(null)
@@ -99,6 +100,7 @@ export function AdminSettings() {
         is_active: form.is_active,
       })
       updateForm(day, defaultDayForm(response.data))
+      toast(`${DAY_NAMES[day]} schedule saved.`)
     } catch (err) {
       setError(extractErrorMessage(err, `Unable to save ${DAY_NAMES[day]}'s schedule.`))
     } finally {
@@ -147,7 +149,7 @@ export function AdminSettings() {
       <PageHeader title="Clinic Settings" />
 
       {error && (
-        <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+        <p role="alert" className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
       )}
 
       {isLoading ? (
@@ -159,7 +161,8 @@ export function AdminSettings() {
               <h2 className="text-sm font-semibold text-slate-900">Weekly hours</h2>
               <p className="text-xs text-slate-500">Turn a day on and set its hours, slot length, and capacity per slot.</p>
             </div>
-            <table className="w-full text-left text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                 <tr>
                   <th className="px-4 py-3">Day</th>
@@ -235,6 +238,7 @@ export function AdminSettings() {
                 })}
               </tbody>
             </table>
+            </div>
           </section>
 
           <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">

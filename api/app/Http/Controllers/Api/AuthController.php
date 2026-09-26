@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
@@ -48,6 +49,11 @@ class AuthController extends Controller
         $user->role = 'patient';
         $user->save();
 
+        app(AuditLogger::class)->log($user->id, 'auth.registered', $user, [
+            'device' => $validated['device'] ?? 'web',
+            'ip' => $request->ip(),
+        ]);
+
         return response()->json([
             'user' => $user,
             'token' => $this->issueToken($user, $validated['device'] ?? null),
@@ -73,10 +79,23 @@ class AuthController extends Controller
         $hash = $user?->password ?? self::dummyHash();
 
         if (! Hash::check($validated['password'], $hash) || ! $user) {
+            // Failed attempts are the first thing an audit asks for. The
+            // user row is attached when the email exists so a targeted
+            // guessing run shows up under that account.
+            app(AuditLogger::class)->log($user?->id, 'auth.login_failed', $user, [
+                'email' => $validated['email'],
+                'ip' => $request->ip(),
+            ]);
+
             return response()->json([
                 'message' => 'The provided credentials are incorrect.',
             ], 422);
         }
+
+        app(AuditLogger::class)->log($user->id, 'auth.login', $user, [
+            'device' => $validated['device'] ?? 'web',
+            'ip' => $request->ip(),
+        ]);
 
         return response()->json([
             'user' => $user,
@@ -90,6 +109,10 @@ class AuthController extends Controller
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();
+
+        app(AuditLogger::class)->log($request->user()->id, 'auth.logout', $request->user(), [
+            'ip' => $request->ip(),
+        ]);
 
         return response()->json([
             'message' => 'Logged out.',
@@ -116,6 +139,32 @@ class AuthController extends Controller
         $request->user()->update(['push_token' => $validated['push_token']]);
 
         return response()->json(['message' => 'Push token saved.']);
+    }
+
+    /**
+     * Change the current user's password. Every other session is revoked:
+     * the reason someone changes a password on a shared clinic desktop is
+     * usually that they think another session shouldn't exist.
+     */
+    public function updatePassword(Request $request)
+    {
+        $validated = $request->validate([
+            'current_password' => ['required', 'current_password:sanctum'],
+            'password' => ['required', 'confirmed', 'different:current_password', Password::defaults()],
+        ]);
+
+        $user = $request->user();
+        $user->update(['password' => Hash::make($validated['password'])]);
+
+        $user->tokens()
+            ->whereKeyNot($user->currentAccessToken()->id)
+            ->delete();
+
+        app(AuditLogger::class)->log($user->id, 'auth.password_changed', $user, [
+            'ip' => $request->ip(),
+        ]);
+
+        return response()->json(['message' => 'Password updated.']);
     }
 
     /**

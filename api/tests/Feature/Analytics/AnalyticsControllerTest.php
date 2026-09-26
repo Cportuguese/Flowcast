@@ -3,6 +3,7 @@
 namespace Tests\Feature\Analytics;
 
 use App\Models\AnalyticsSnapshot;
+use App\Models\ClinicSchedule;
 use App\Models\EventDay;
 use App\Models\QueueEntry;
 use App\Models\User;
@@ -139,5 +140,75 @@ class AnalyticsControllerTest extends TestCase
         $trendRow = collect($response->json('trend'))->firstWhere('date', today()->copy()->subDays(2)->toDateString());
         $this->assertSame(16, $trendRow['avg_wait_minutes']);
         $this->assertSame(9, $response->json('forecast_for_hour'));
+    }
+
+    public function test_volume_forecast_carries_a_prediction_band_and_its_provenance(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-15 08:00:00'));
+        $target = today()->copy()->addDay();
+
+        AnalyticsSnapshot::factory()->create(['date' => $target->copy()->subWeek()->toDateString(), 'hour' => 9, 'arrival_count' => 30]);
+        AnalyticsSnapshot::factory()->create(['date' => $target->copy()->subWeeks(2)->toDateString(), 'hour' => 9, 'arrival_count' => 20]);
+
+        Sanctum::actingAs(User::factory()->admin()->create());
+
+        $response = $this->getJson('/api/analytics/volume-forecast?days=1')->assertOk();
+        $forecast = collect($response->json('series'))->firstWhere('type', 'forecast');
+
+        /** Untrained, so the documented heuristic still serves. */
+        $this->assertSame('heuristic', $forecast['source']);
+        $this->assertFalse($response->json('model.is_trained'));
+
+        $this->assertLessThanOrEqual($forecast['predicted_arrivals'], $forecast['low']);
+        $this->assertGreaterThanOrEqual($forecast['predicted_arrivals'], $forecast['high']);
+    }
+
+    public function test_volume_forecast_reports_zero_on_a_day_the_clinic_is_closed(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-15 08:00:00'));
+        $target = today()->copy()->addDay();
+
+        /** Open Tuesdays only; the target is a Wednesday. */
+        ClinicSchedule::factory()->create(['day_of_week' => 2, 'is_active' => true]);
+
+        AnalyticsSnapshot::factory()->create(['date' => $target->copy()->subWeek()->toDateString(), 'hour' => 9, 'arrival_count' => 30]);
+        AnalyticsSnapshot::factory()->create(['date' => $target->copy()->subWeeks(2)->toDateString(), 'hour' => 9, 'arrival_count' => 20]);
+
+        Sanctum::actingAs(User::factory()->admin()->create());
+
+        $forecast = collect($this->getJson('/api/analytics/volume-forecast?days=1')->assertOk()->json('series'))
+            ->firstWhere('type', 'forecast');
+
+        $this->assertSame(3, $target->dayOfWeek);
+        $this->assertSame('closed', $forecast['source']);
+        $this->assertSame(0, $forecast['predicted_arrivals']);
+    }
+
+    public function test_upcoming_hours_include_a_wait_range(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-23 09:00:00'));
+
+        ClinicSchedule::factory()->create([
+            'day_of_week' => today()->dayOfWeek,
+            'start_time' => '08:00:00',
+            'end_time' => '17:00:00',
+            'is_active' => true,
+        ]);
+
+        AnalyticsSnapshot::factory()->create(['date' => today()->copy()->subWeek()->toDateString(), 'hour' => 11, 'arrival_count' => 12]);
+        AnalyticsSnapshot::factory()->create(['date' => today()->copy()->subWeeks(2)->toDateString(), 'hour' => 11, 'arrival_count' => 8]);
+
+        Sanctum::actingAs(User::factory()->personnel()->create());
+
+        $hours = $this->getJson('/api/analytics/dashboard')->assertOk()->json('upcoming_hours');
+
+        $this->assertNotEmpty($hours);
+
+        foreach ($hours as $hour) {
+            $this->assertArrayHasKey('estimated_wait_low', $hour);
+            $this->assertArrayHasKey('estimated_wait_high', $hour);
+            $this->assertLessThanOrEqual($hour['estimated_wait_minutes'], $hour['estimated_wait_low']);
+            $this->assertGreaterThanOrEqual($hour['estimated_wait_minutes'], $hour['estimated_wait_high']);
+        }
     }
 }

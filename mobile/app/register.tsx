@@ -17,7 +17,7 @@ import { useAuth, type PatientType } from '../context/AuthContext';
 const PATIENT_TYPES: Array<{ value: PatientType; label: string }> = [
   { value: 'student', label: 'Student' },
   { value: 'faculty', label: 'Faculty' },
-  { value: 'staff', label: 'Staff' },
+  { value: 'staff', label: 'School Employee' },
 ];
 
 export default function Register() {
@@ -112,7 +112,7 @@ export default function Register() {
                     selected ? 'border-brand bg-brand' : 'border-slate-300 bg-white'
                   }`}
                 >
-                  <Text className={`text-sm font-medium ${selected ? 'text-white' : 'text-slate-700'}`}>
+                  <Text className={`text-center text-sm font-medium ${selected ? 'text-white' : 'text-slate-700'}`}>
                     {type.label}
                   </Text>
                 </Pressable>

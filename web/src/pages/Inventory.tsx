@@ -6,6 +6,7 @@ import { extractErrorMessage, type Medicine } from '../lib/inventory'
 import { PageHeader } from '../components/PageHeader'
 import { StatusPill, type StatusTone } from '../components/StatusPill'
 import { buttonClass } from '../components/Button'
+import { useToast } from '../components/Toast'
 
 interface BatchAlert {
   id: number
@@ -34,10 +35,12 @@ export function Inventory() {
   const navigate = useNavigate()
   const isAdmin = user?.role === 'admin'
 
+  const toast = useToast()
   const [medicines, setMedicines] = useState<Medicine[]>([])
   const [expiringSoon, setExpiringSoon] = useState<BatchAlert[]>([])
   const [expired, setExpired] = useState<BatchAlert[]>([])
   const [showArchived, setShowArchived] = useState(false)
+  const [search, setSearch] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -71,6 +74,7 @@ export function Inventory() {
     try {
       await api.patch(`/admin/medicines/${medicine.id}`, { is_active: !medicine.is_active })
       await load()
+      toast(`${medicine.name} ${medicine.is_active ? 'archived' : 'restored'}.`)
     } catch (err) {
       setError(extractErrorMessage(err, 'Unable to update medicine.'))
     }
@@ -83,6 +87,7 @@ export function Inventory() {
     try {
       await api.post(`/admin/inventory/batches/${batch.id}/dispose`)
       await load()
+      toast(`Disposed expired ${batch.medicine.name} batch.`)
     } catch (err) {
       setError(extractErrorMessage(err, 'Unable to dispose batch.'))
     }
@@ -90,13 +95,17 @@ export function Inventory() {
 
   const lowStock = medicines.filter((m) => m.is_active && m.status !== 'ok')
   const activeMedicines = medicines.filter((m) => m.is_active)
+  const needle = search.trim().toLowerCase()
+  const visibleMedicines = needle
+    ? medicines.filter((m) => m.name.toLowerCase().includes(needle) || m.category?.toLowerCase().includes(needle))
+    : medicines
 
   return (
     <>
       <div className="mx-auto max-w-5xl">
         <PageHeader title="Inventory" />
 
-        {error && <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+        {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
         {lowStock.length > 0 && (
           <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -145,16 +154,24 @@ export function Inventory() {
               >
                 History
               </button>
-              <label className="ml-auto flex items-center gap-2 text-sm text-slate-600">
+              <label className="flex items-center gap-2 text-sm text-slate-600">
                 <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
                 Show archived
               </label>
             </>
           )}
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Find medicine"
+            aria-label="Find medicine by name or category"
+            className="ml-auto w-48 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+          />
         </div>
 
-        <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-left text-sm">
+        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+          <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
                 <th className="px-4 py-3">Medicine</th>
@@ -172,14 +189,18 @@ export function Inventory() {
                   <td colSpan={7} className="px-4 py-6 text-center text-slate-400">Loading…</td>
                 </tr>
               )}
-              {!isLoading && medicines.length === 0 && (
+              {!isLoading && visibleMedicines.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
-                    {isAdmin ? 'No medicines yet. Add one to get started.' : 'No medicines in the catalog yet.'}
+                    {medicines.length > 0
+                      ? 'No medicines match this search.'
+                      : isAdmin
+                        ? 'No medicines yet. Add one to get started.'
+                        : 'No medicines in the catalog yet.'}
                   </td>
                 </tr>
               )}
-              {medicines.map((m) => (
+              {visibleMedicines.map((m) => (
                 <Fragment key={m.id}>
                   <tr
                     onClick={() => setExpandedId(expandedId === m.id ? null : m.id)}
@@ -243,8 +264,8 @@ export function Inventory() {
         {isAdmin && expired.length > 0 && (
           <div className="mt-6">
             <h2 className="text-sm font-semibold text-slate-900">Expired stock to dispose</h2>
-            <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-              <table className="w-full text-left text-sm">
+            <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+              <table className="w-full min-w-[560px] text-left text-sm">
                 <tbody className="divide-y divide-slate-100">
                   {expired.map((b) => (
                     <tr key={b.id}>
@@ -274,6 +295,7 @@ export function Inventory() {
           onSaved={() => {
             setStockModal(null)
             void load()
+            toast(stockModal === 'in' ? 'Stock received.' : 'Stock deducted.')
           }}
         />
       )}
@@ -285,6 +307,7 @@ export function Inventory() {
           onSaved={() => {
             setMedicineModal(null)
             void load()
+            toast(medicineModal.editing ? 'Medicine updated.' : 'Medicine added.')
           }}
         />
       )}
@@ -349,12 +372,12 @@ function StockModal({
           {mode === 'in' ? 'Record a delivery as a new batch.' : 'Routine depletion — oldest expiry is used first. Medicines given to a patient are recorded on the visit form instead.'}
         </p>
 
-        {error && <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+        {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-700">Medicine</label>
-            <select required value={medicineId} onChange={(e) => setMedicineId(e.target.value)} className={inputClass}>
+            <label htmlFor="inv-medicine" className="mb-1 block text-xs font-medium text-slate-700">Medicine</label>
+            <select id="inv-medicine" required value={medicineId} onChange={(e) => setMedicineId(e.target.value)} className={inputClass}>
               {medicines.length === 0 && <option value="">No medicines available</option>}
               {medicines.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -364,10 +387,11 @@ function StockModal({
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-700">
+            <label htmlFor="inv-quantity" className="mb-1 block text-xs font-medium text-slate-700">
               Quantity{selected ? ` (${selected.unit})` : ''}
             </label>
             <input
+              id="inv-quantity"
               required
               type="number"
               min={1}
@@ -380,18 +404,18 @@ function StockModal({
           {mode === 'in' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-700">Batch / lot no. (optional)</label>
-                <input value={batchNumber} onChange={(e) => setBatchNumber(e.target.value)} className={inputClass} />
+                <label htmlFor="inv-batch-lot-no" className="mb-1 block text-xs font-medium text-slate-700">Batch / lot no. (optional)</label>
+                <input id="inv-batch-lot-no" value={batchNumber} onChange={(e) => setBatchNumber(e.target.value)} className={inputClass} />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-700">Expiry date</label>
-                <input required type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className={inputClass} />
+                <label htmlFor="inv-expiry-date" className="mb-1 block text-xs font-medium text-slate-700">Expiry date</label>
+                <input id="inv-expiry-date" required type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className={inputClass} />
               </div>
             </div>
           )}
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-700">Notes (optional)</label>
-            <input
+            <label htmlFor="inv-notes" className="mb-1 block text-xs font-medium text-slate-700">Notes (optional)</label>
+            <input id="inv-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder={mode === 'in' ? 'e.g. Delivery from supplier' : 'e.g. First-aid kit refill'}
@@ -455,21 +479,21 @@ function MedicineFormModal({ editing, onClose, onSaved }: { editing: Medicine | 
       <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
         <h2 className="text-lg font-semibold text-slate-900">{editing ? 'Edit medicine' : 'Add medicine'}</h2>
 
-        {error && <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+        {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-700">Name</label>
-            <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Paracetamol 500mg" className={inputClass} />
+            <label htmlFor="inv-name" className="mb-1 block text-xs font-medium text-slate-700">Name</label>
+            <input id="inv-name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Paracetamol 500mg" className={inputClass} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-700">Category (optional)</label>
-              <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Analgesic" className={inputClass} />
+              <label htmlFor="inv-category" className="mb-1 block text-xs font-medium text-slate-700">Category (optional)</label>
+              <input id="inv-category" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Analgesic" className={inputClass} />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-700">Unit</label>
-              <input required list="unit-suggestions" value={unit} onChange={(e) => setUnit(e.target.value)} maxLength={20} className={inputClass} />
+              <label htmlFor="inv-unit" className="mb-1 block text-xs font-medium text-slate-700">Unit</label>
+              <input id="inv-unit" required list="unit-suggestions" value={unit} onChange={(e) => setUnit(e.target.value)} maxLength={20} className={inputClass} />
               <datalist id="unit-suggestions">
                 {UNIT_SUGGESTIONS.map((u) => (
                   <option key={u} value={u} />
@@ -479,12 +503,12 @@ function MedicineFormModal({ editing, onClose, onSaved }: { editing: Medicine | 
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-700">Reorder when stock ≤</label>
-              <input required type="number" min={0} value={reorderLevel} onChange={(e) => setReorderLevel(e.target.value)} className={inputClass} />
+              <label htmlFor="inv-reorder-when-stock" className="mb-1 block text-xs font-medium text-slate-700">Reorder when stock ≤</label>
+              <input id="inv-reorder-when-stock" required type="number" min={0} value={reorderLevel} onChange={(e) => setReorderLevel(e.target.value)} className={inputClass} />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-700">Usual reorder qty (optional)</label>
-              <input type="number" min={1} value={reorderQuantity} onChange={(e) => setReorderQuantity(e.target.value)} className={inputClass} />
+              <label htmlFor="inv-usual-reorder-qty" className="mb-1 block text-xs font-medium text-slate-700">Usual reorder qty (optional)</label>
+              <input id="inv-usual-reorder-qty" type="number" min={1} value={reorderQuantity} onChange={(e) => setReorderQuantity(e.target.value)} className={inputClass} />
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">

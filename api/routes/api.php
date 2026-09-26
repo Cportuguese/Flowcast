@@ -13,18 +13,23 @@ use App\Http\Controllers\Api\ScheduleController;
 use App\Http\Controllers\Api\VisitController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('throttle:6,1')->group(function () {
+// Keyed by (email, IP) so one crowded network can't lock everyone out.
+Route::middleware('throttle:auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
 });
 
 // Public, unauthenticated — feeds the waiting-room TV board. No patient data.
-Route::get('/queue-board/today', [QueueController::class, 'boardToday']);
+Route::get('/queue-board/today', [QueueController::class, 'boardToday'])
+    ->middleware('throttle:public');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
     Route::patch('/user/push-token', [AuthController::class, 'updatePushToken']);
+    // Verifies the current password, so it gets its own tight limiter.
+    Route::patch('/user/password', [AuthController::class, 'updatePassword'])
+        ->middleware('throttle:sensitive');
 
     Route::get('/admin/ping', function () {
         return response()->json(['message' => 'pong from admin route']);
@@ -127,5 +132,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/volume-forecast', [AnalyticsController::class, 'volumeForecast']);
         Route::get('/wait-time-forecast', [AnalyticsController::class, 'waitTimeForecast']);
         Route::get('/peak-hours', [AnalyticsController::class, 'peakHours']);
+        // Actionable for whoever is rostering the day, so personnel see it too.
+        Route::get('/staffing-what-if', [AnalyticsController::class, 'staffingWhatIf']);
     });
+
+    // How the models themselves are performing is management information
+    // rather than operational data, so it stays admin-only.
+    Route::get('/analytics/model-performance', [AnalyticsController::class, 'modelPerformance'])
+        ->middleware('role:admin');
 });

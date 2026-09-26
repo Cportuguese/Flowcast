@@ -33,15 +33,76 @@ class LoginTest extends TestCase
         $this->assertSame($wrongPassword->json(), $unknownEmail->json());
     }
 
-    public function test_login_is_rate_limited(): void
+    public function test_login_is_rate_limited_per_email(): void
     {
-        for ($i = 0; $i < 6; $i++) {
+        for ($i = 0; $i < 5; $i++) {
             $this->postJson('/api/login', ['email' => 'ghost@example.com', 'password' => 'nope'])
                 ->assertUnprocessable();
         }
 
         $this->postJson('/api/login', ['email' => 'ghost@example.com', 'password' => 'nope'])
             ->assertStatus(429);
+    }
+
+    public function test_one_locked_email_does_not_lock_the_whole_network(): void
+    {
+        for ($i = 0; $i < 6; $i++) {
+            $this->postJson('/api/login', ['email' => 'ghost@example.com', 'password' => 'nope']);
+        }
+
+        // Same IP, different account: a classroom on one NAT keeps working.
+        $this->postJson('/api/login', ['email' => 'other@example.com', 'password' => 'nope'])
+            ->assertUnprocessable();
+    }
+
+    public function test_authenticated_requests_are_rate_limited_per_user(): void
+    {
+        config(['security.rate_limits.api' => 3]);
+        $user = User::factory()->create();
+        $token = $user->createToken('t', ['*'], now()->addHour())->plainTextToken;
+
+        for ($i = 0; $i < 3; $i++) {
+            $this->withToken($token)->getJson('/api/user')->assertOk();
+        }
+
+        $this->withToken($token)->getJson('/api/user')->assertStatus(429);
+
+        // A different user is a different bucket.
+        $other = User::factory()->create()->createToken('t', ['*'], now()->addHour())->plainTextToken;
+        $this->app['auth']->forgetGuards();
+        $this->withToken($other)->getJson('/api/user')->assertOk();
+    }
+
+    public function test_public_board_is_rate_limited_per_ip(): void
+    {
+        config(['security.rate_limits.public' => 2]);
+
+        $this->getJson('/api/queue-board/today')->assertOk();
+        $this->getJson('/api/queue-board/today')->assertOk();
+        $this->getJson('/api/queue-board/today')->assertStatus(429);
+    }
+
+    public function test_login_success_and_failure_are_audited(): void
+    {
+        $user = User::factory()->create(['email' => 'nurse@example.com']);
+
+        $this->postJson('/api/login', ['email' => 'nurse@example.com', 'password' => 'nope']);
+        $this->postJson('/api/login', ['email' => 'ghost@example.com', 'password' => 'nope']);
+        $this->postJson('/api/login', ['email' => 'nurse@example.com', 'password' => 'password']);
+
+        $this->assertDatabaseHas('audit_logs', ['action' => 'auth.login_failed', 'user_id' => $user->id]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'auth.login_failed', 'user_id' => null]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'auth.login', 'user_id' => $user->id]);
+    }
+
+    public function test_logout_is_audited(): void
+    {
+        $user = User::factory()->create();
+        $token = $user->createToken('t', ['*'], now()->addHour())->plainTextToken;
+
+        $this->withToken($token)->postJson('/api/logout')->assertOk();
+
+        $this->assertDatabaseHas('audit_logs', ['action' => 'auth.logout', 'user_id' => $user->id]);
     }
 
     public function test_requests_without_a_token_are_rejected(): void

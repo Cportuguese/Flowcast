@@ -2,8 +2,10 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { OfflineNotice } from '../../components/OfflineNotice';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { api } from '../../lib/api';
+import { fetchWithCache, isNetworkError } from '../../lib/cache';
 
 interface VisitSummary {
   id: number;
@@ -22,10 +24,19 @@ export default function VisitHistory() {
   const [visits, setVisits] = useState<VisitSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [offline, setOffline] = useState<{ since: string | null } | null>(null);
 
   const load = useCallback(async () => {
-    const response = await api.get<VisitSummary[]>('/visits/mine');
-    setVisits(response.data);
+    try {
+      const { data, offlineSince } = await fetchWithCache('visits-mine', async () => {
+        const response = await api.get<VisitSummary[]>('/visits/mine');
+        return response.data;
+      });
+      setVisits(data);
+      setOffline(offlineSince ? { since: offlineSince } : null);
+    } catch (err) {
+      if (isNetworkError(err)) setOffline({ since: null });
+    }
   }, []);
 
   useEffect(() => {
@@ -55,7 +66,9 @@ export default function VisitHistory() {
       <View className="px-6">
         <ScreenHeader title="Visits" subtitle="Your past clinic visit records" />
 
-        {visits.length === 0 && (
+        {offline && <OfflineNotice since={offline.since} />}
+
+        {visits.length === 0 && !(offline && offline.since === null) && (
           <Text className="mt-8 text-sm text-slate-400">No visits recorded yet.</Text>
         )}
 

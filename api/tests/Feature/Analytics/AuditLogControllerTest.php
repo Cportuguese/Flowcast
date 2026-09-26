@@ -52,6 +52,24 @@ class AuditLogControllerTest extends TestCase
         $this->assertSame([$match->id], collect($response->json())->pluck('id')->all());
     }
 
+    public function test_action_filter_treats_wildcards_as_literal_text(): void
+    {
+        AuditLog::factory()->create(['action' => 'queue.completed']);
+        AuditLog::factory()->create(['action' => 'appointment.booked']);
+        $literal = AuditLog::factory()->create(['action' => 'odd%action']);
+
+        Sanctum::actingAs(User::factory()->admin()->create());
+
+        // A bare "%" would otherwise match every row; "_" would match any char.
+        $percent = $this->getJson('/api/admin/audit-logs?action=%25')->assertOk();
+        $this->assertSame([$literal->id], collect($percent->json())->pluck('id')->all());
+
+        $this->assertCount(0, $this->getJson('/api/admin/audit-logs?action=_')->assertOk()->json());
+
+        $response = $this->getJson('/api/admin/audit-logs?action=d%25a')->assertOk();
+        $this->assertSame([$literal->id], collect($response->json())->pluck('id')->all());
+    }
+
     public function test_filters_by_patient_id_via_the_related_model(): void
     {
         $patient = User::factory()->patient()->create();

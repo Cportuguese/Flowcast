@@ -112,7 +112,14 @@ export function AppShell() {
       </nav>
 
       <div className="border-t border-white/10 px-5 py-4">
-        <div className="flex items-center gap-3">
+        <NavLink
+          to="/account"
+          onClick={closeDrawer}
+          aria-label="Account settings"
+          className={({ isActive }) =>
+            `-mx-2 flex items-center gap-3 rounded-md px-2 py-1.5 transition hover:bg-white/5 ${isActive ? 'bg-white/10' : ''}`
+          }
+        >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold">
             {initials(user?.name)}
           </span>
@@ -120,7 +127,7 @@ export function AppShell() {
             <p className="truncate text-sm font-medium">{user?.name}</p>
             <p className="text-xs capitalize text-slate-400">{user?.role}</p>
           </div>
-        </div>
+        </NavLink>
         <button
           type="button"
           onClick={handleLogout}

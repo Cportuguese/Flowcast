@@ -42,7 +42,7 @@ class AuditLogController extends Controller
         }
 
         if (! empty($validated['action'])) {
-            $query->where('action', 'like', '%'.$validated['action'].'%');
+            $query->whereRaw('action LIKE ? ESCAPE \'!\'', [self::likeContains($validated['action'])]);
         }
 
         if (! empty($validated['patient'])) {
@@ -58,7 +58,10 @@ class AuditLogController extends Controller
     {
         $patientIds = is_numeric($patient)
             ? collect([(int) $patient])
-            : User::where('role', 'patient')->where('name', 'like', '%'.$patient.'%')->limit(20)->pluck('id');
+            : User::where('role', 'patient')
+                ->whereRaw('name LIKE ? ESCAPE \'!\'', [self::likeContains($patient)])
+                ->limit(20)
+                ->pluck('id');
 
         $query->where(function ($q) use ($patientIds) {
             $q->where(fn ($q2) => $q2->where('model_type', 'Appointment')->whereIn('model_id', Appointment::whereIn('patient_id', $patientIds)->pluck('id')))
@@ -66,6 +69,17 @@ class AuditLogController extends Controller
                 ->orWhere(fn ($q2) => $q2->where('model_type', 'VisitRecord')->whereIn('model_id', VisitRecord::whereIn('patient_id', $patientIds)->pluck('id')))
                 ->orWhere(fn ($q2) => $q2->where('model_type', 'User')->whereIn('model_id', $patientIds));
         });
+    }
+
+    /**
+     * A "contains" LIKE pattern with the user's `%`, `_` and `!` treated as
+     * literal characters rather than wildcards. Bindings already stop SQL
+     * injection; this stops a stray `%` from matching everything. `!` is
+     * used as the escape char because it means the same on MySQL and SQLite.
+     */
+    private static function likeContains(string $value): string
+    {
+        return '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $value).'%';
     }
 
     /**

@@ -115,6 +115,22 @@ class MedicalCertificateTest extends TestCase
         $this->get("/api/visits/{$other->visit_record_id}/certificate/download")->assertForbidden();
     }
 
+    public function test_downloads_are_audited(): void
+    {
+        $certificate = MedicalCertificate::factory()->create();
+        Storage::put($certificate->file_path, '%PDF-fake');
+
+        Sanctum::actingAs($certificate->patient);
+        $this->get("/api/visits/{$certificate->visit_record_id}/certificate/download")->assertOk();
+
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'certificate.downloaded',
+            'user_id' => $certificate->patient_id,
+            'model_type' => 'MedicalCertificate',
+            'model_id' => $certificate->id,
+        ]);
+    }
+
     public function test_download_regenerates_a_missing_file(): void
     {
         $certificate = MedicalCertificate::factory()->create();

@@ -41,6 +41,7 @@ function RootNavigator() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="book-appointment" />
         <Stack.Screen name="visit-detail" />
+        <Stack.Screen name="change-password" />
       </Stack.Protected>
     </Stack>
   );

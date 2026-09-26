@@ -149,12 +149,12 @@ function QueueSummarySection() {
 
       <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3 border-b border-slate-100 p-5 print:hidden">
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">From</label>
-          <input type="date" required value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded border border-slate-300 px-3 py-2 text-sm" />
+          <label htmlFor="report-from" className="mb-1 block text-xs font-medium text-slate-700">From</label>
+          <input id="report-from" type="date" required value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded border border-slate-300 px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">To</label>
-          <input type="date" required value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded border border-slate-300 px-3 py-2 text-sm" />
+          <label htmlFor="report-to" className="mb-1 block text-xs font-medium text-slate-700">To</label>
+          <input id="report-to" type="date" required value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded border border-slate-300 px-3 py-2 text-sm" />
         </div>
         <button type="submit" disabled={isLoading} className={buttonClass.primary}>
           {isLoading ? 'Running…' : 'Run'}
@@ -252,12 +252,12 @@ function VisitSummarySection() {
 
       <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3 border-b border-slate-100 p-5 print:hidden">
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">From</label>
-          <input type="date" required value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded border border-slate-300 px-3 py-2 text-sm" />
+          <label htmlFor="report-from-2" className="mb-1 block text-xs font-medium text-slate-700">From</label>
+          <input id="report-from-2" type="date" required value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded border border-slate-300 px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">To</label>
-          <input type="date" required value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded border border-slate-300 px-3 py-2 text-sm" />
+          <label htmlFor="report-to-2" className="mb-1 block text-xs font-medium text-slate-700">To</label>
+          <input id="report-to-2" type="date" required value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded border border-slate-300 px-3 py-2 text-sm" />
         </div>
         <button type="submit" disabled={isLoading} className={buttonClass.primary}>
           {isLoading ? 'Running…' : 'Run'}
@@ -345,8 +345,8 @@ function NoShowSummarySection() {
 
       <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3 border-b border-slate-100 p-5 print:hidden">
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">Month</label>
-          <input type="month" required value={month} onChange={(e) => setMonth(e.target.value)} className="rounded border border-slate-300 px-3 py-2 text-sm" />
+          <label htmlFor="report-month" className="mb-1 block text-xs font-medium text-slate-700">Month</label>
+          <input id="report-month" type="month" required value={month} onChange={(e) => setMonth(e.target.value)} className="rounded border border-slate-300 px-3 py-2 text-sm" />
         </div>
         <button type="submit" disabled={isLoading} className={buttonClass.primary}>
           {isLoading ? 'Running…' : 'Run'}

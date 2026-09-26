@@ -110,16 +110,16 @@ export function InventoryHistory() {
 
       <form onSubmit={handleSearch} className="mt-6 flex flex-wrap items-end gap-3">
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">From</label>
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          <label htmlFor="invhist-from" className="mb-1 block text-xs font-medium text-slate-700">From</label>
+          <input id="invhist-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">To</label>
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          <label htmlFor="invhist-to" className="mb-1 block text-xs font-medium text-slate-700">To</label>
+          <input id="invhist-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">Medicine</label>
-          <select value={medicineId} onChange={(e) => setMedicineId(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <label htmlFor="invhist-medicine" className="mb-1 block text-xs font-medium text-slate-700">Medicine</label>
+          <select id="invhist-medicine" value={medicineId} onChange={(e) => setMedicineId(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
             <option value="">All</option>
             {medicines.map((m) => (
               <option key={m.id} value={m.id}>
@@ -130,8 +130,8 @@ export function InventoryHistory() {
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">Type</label>
-          <select value={type} onChange={(e) => setType(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <label htmlFor="invhist-type" className="mb-1 block text-xs font-medium text-slate-700">Type</label>
+          <select id="invhist-type" value={type} onChange={(e) => setType(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
             <option value="">All</option>
             <option value="stock_in">Stock in</option>
             <option value="stock_out">Stock out</option>
@@ -148,11 +148,11 @@ export function InventoryHistory() {
         )}
       </form>
 
-      {error && <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
       {results && (
-        <div className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-left text-sm">
+        <div className="mt-6 overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+          <table className="w-full min-w-[560px] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
                 <th className="px-4 py-3">Date/Time</th>

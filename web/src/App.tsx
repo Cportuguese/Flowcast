@@ -1,8 +1,10 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
+import { PageLoading } from './components/PageLoading'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import { Account } from './pages/Account'
 import { AdminSettings } from './pages/AdminSettings'
-import { AnalyticsDashboard } from './pages/AnalyticsDashboard'
 import { Appointments } from './pages/Appointments'
 import { AuditLog } from './pages/AuditLog'
 import { Dashboard } from './pages/Dashboard'
@@ -15,6 +17,12 @@ import { Reports } from './pages/Reports'
 import { TvBoard } from './pages/TvBoard'
 import { VisitsSearch } from './pages/VisitsSearch'
 
+// The only page besides AdminHome that needs recharts — split it so the
+// nurse's first load (queue, appointments, visits) doesn't pay for charts.
+const AnalyticsDashboard = lazy(() =>
+  import('./pages/AnalyticsDashboard').then((m) => ({ default: m.AnalyticsDashboard })),
+)
+
 function App() {
   return (
     <Routes>
@@ -25,13 +33,21 @@ function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/account" element={<Account />} />
 
           <Route element={<ProtectedRoute allowedRoles={['admin', 'personnel']} />}>
             <Route path="/queue" element={<QueueBoard />} />
             <Route path="/appointments" element={<Appointments />} />
             <Route path="/visits" element={<VisitsSearch />} />
             <Route path="/inventory" element={<Inventory />} />
-            <Route path="/analytics" element={<AnalyticsDashboard />} />
+            <Route
+              path="/analytics"
+              element={
+                <Suspense fallback={<PageLoading />}>
+                  <AnalyticsDashboard />
+                </Suspense>
+              }
+            />
           </Route>
 
           <Route element={<ProtectedRoute allowedRoles={['admin']} />}>

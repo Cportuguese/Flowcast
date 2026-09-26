@@ -3,8 +3,10 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { OfflineNotice } from '../../components/OfflineNotice';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { api } from '../../lib/api';
+import { fetchWithCache, isNetworkError } from '../../lib/cache';
 
 interface Appointment {
   id: number;
@@ -92,11 +94,20 @@ export default function MyAppointments() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [offline, setOffline] = useState<{ since: string | null } | null>(null);
 
   const load = useCallback(async () => {
-    const response = await api.get<{ upcoming: Appointment[]; past: Appointment[] }>('/appointments/mine');
-    setUpcoming(response.data.upcoming);
-    setPast(response.data.past);
+    try {
+      const { data, offlineSince } = await fetchWithCache('appointments-mine', async () => {
+        const response = await api.get<{ upcoming: Appointment[]; past: Appointment[] }>('/appointments/mine');
+        return response.data;
+      });
+      setUpcoming(data.upcoming);
+      setPast(data.past);
+      setOffline(offlineSince ? { since: offlineSince } : null);
+    } catch (err) {
+      if (isNetworkError(err)) setOffline({ since: null });
+    }
   }, []);
 
   useEffect(() => {
@@ -150,6 +161,8 @@ export default function MyAppointments() {
     >
       <View className="px-6">
         <ScreenHeader title="Appointments" subtitle="Book, track, or cancel your clinic visits" />
+
+        {offline && <OfflineNotice since={offline.since} />}
 
         {error && (
           <Text className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</Text>

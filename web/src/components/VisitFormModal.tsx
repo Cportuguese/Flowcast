@@ -160,12 +160,12 @@ export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: 
         ) : (
         <>
         {error && (
-          <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+          <p role="alert" className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
         )}
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-700">Complaint</label>
+            <label htmlFor="visit-complaint" className="mb-1 block text-xs font-medium text-slate-700">Complaint</label>
             <div className="mb-2 flex flex-wrap gap-1.5">
               {COMMON_COMPLAINTS.map((label) => (
                 <button
@@ -183,6 +183,7 @@ export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: 
               ))}
             </div>
             <textarea
+              id="visit-complaint"
               required
               value={complaint}
               onChange={(e) => setComplaint(e.target.value)}
@@ -194,8 +195,8 @@ export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: 
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-700">BP</label>
-              <input
+              <label htmlFor="visit-bp" className="mb-1 block text-xs font-medium text-slate-700">BP</label>
+              <input id="visit-bp"
                 value={bloodPressure}
                 onChange={(e) => setBloodPressure(e.target.value)}
                 placeholder="120/80"
@@ -203,8 +204,8 @@ export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: 
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-700">Temp (°C)</label>
-              <input
+              <label htmlFor="visit-temp" className="mb-1 block text-xs font-medium text-slate-700">Temp (°C)</label>
+              <input id="visit-temp"
                 value={temperature}
                 onChange={(e) => setTemperature(e.target.value)}
                 inputMode="decimal"
@@ -213,8 +214,8 @@ export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: 
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-700">Pulse</label>
-              <input
+              <label htmlFor="visit-pulse" className="mb-1 block text-xs font-medium text-slate-700">Pulse</label>
+              <input id="visit-pulse"
                 value={pulse}
                 onChange={(e) => setPulse(e.target.value)}
                 inputMode="numeric"
@@ -223,8 +224,8 @@ export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: 
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-700">Resp rate</label>
-              <input
+              <label htmlFor="visit-resp-rate" className="mb-1 block text-xs font-medium text-slate-700">Resp rate</label>
+              <input id="visit-resp-rate"
                 value={respRate}
                 onChange={(e) => setRespRate(e.target.value)}
                 inputMode="numeric"
@@ -235,8 +236,8 @@ export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: 
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-700">Diagnosis</label>
-            <textarea
+            <label htmlFor="visit-diagnosis" className="mb-1 block text-xs font-medium text-slate-700">Diagnosis</label>
+            <textarea id="visit-diagnosis"
               required
               value={diagnosis}
               onChange={(e) => setDiagnosis(e.target.value)}
@@ -246,8 +247,8 @@ export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: 
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-700">Treatment</label>
-            <textarea
+            <label htmlFor="visit-treatment" className="mb-1 block text-xs font-medium text-slate-700">Treatment</label>
+            <textarea id="visit-treatment"
               value={treatment}
               onChange={(e) => setTreatment(e.target.value)}
               rows={2}
@@ -258,7 +259,7 @@ export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: 
           {medicines.length > 0 && (
             <div>
               <div className="mb-1 flex items-center justify-between">
-                <label className="block text-xs font-medium text-slate-700">Medicines given</label>
+                <span className="block text-xs font-medium text-slate-700">Medicines given</span>
                 <button
                   type="button"
                   onClick={addDispensedLine}
@@ -312,8 +313,8 @@ export function VisitFormModal({ queueEntryId, patientName, onClose, onSaved }: 
           )}
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-700">Referred to (optional)</label>
-            <input
+            <label htmlFor="visit-referred-to" className="mb-1 block text-xs font-medium text-slate-700">Referred to (optional)</label>
+            <input id="visit-referred-to"
               value={referredTo}
               onChange={(e) => setReferredTo(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"

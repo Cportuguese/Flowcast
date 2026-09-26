@@ -13,6 +13,7 @@ use App\Models\QueueEntry;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\ExpoPushNotifier;
+use App\Services\Ml\WaitTimePredictor;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -24,6 +25,8 @@ use Illuminate\Validation\Rule;
 
 class QueueController extends Controller
 {
+    public function __construct(private readonly WaitTimePredictor $waitTimePredictor) {}
+
     public function checkIn(Request $request)
     {
         $user = $request->user();
@@ -114,7 +117,10 @@ class QueueController extends Controller
 
     private function assignQueueEntry(int $patientId, ?Appointment $appointment, Carbon $today): QueueEntry
     {
-        $entry = DB::transaction(function () use ($patientId, $appointment, $today) {
+        $peopleAhead = QueueEntry::where('queue_date', $today)->where('status', 'waiting')->count();
+        $estimate = $this->estimatedWait($today, $peopleAhead, $appointment !== null);
+
+        $entry = DB::transaction(function () use ($patientId, $appointment, $today, $estimate) {
             for ($attempt = 0; $attempt < 5; $attempt++) {
                 $nextNumber = (int) QueueEntry::where('queue_date', $today)->max('queue_number') + 1;
 
@@ -127,6 +133,10 @@ class QueueController extends Controller
                         'status' => 'waiting',
                         'appointment_id' => $appointment?->id,
                         'joined_at' => now(),
+                        // Recorded at arrival so predicted-vs-actual stays
+                        // measurable on live data, not just on a holdout.
+                        'predicted_wait_minutes' => $estimate['minutes'],
+                        'prediction_model_version' => $estimate['model_version'],
                     ]);
                 } catch (QueryException $e) {
                     if ($attempt === 4 || $e->getCode() !== '23000') {
@@ -139,6 +149,8 @@ class QueueController extends Controller
         if ($appointment) {
             $appointment->update(['status' => 'checked_in']);
         }
+
+        $this->waitTimePredictor->refresh();
 
         return $entry;
     }
@@ -330,36 +342,30 @@ class QueueController extends Controller
             ->where('queue_number', '<', $entry->queue_number)
             ->count();
 
+        $estimate = $this->estimatedWait($today, $peopleAhead, $entry->source === 'appointment');
+
         return response()->json([
             'date' => $today->toDateString(),
             'entry' => $this->formatEntry($entry),
             'position' => $peopleAhead + 1,
             'people_ahead' => $peopleAhead,
-            'estimated_wait_minutes' => $this->estimatedWaitMinutes($today, $peopleAhead),
+            'estimated_wait_minutes' => $estimate['minutes'],
+            'estimated_wait_low' => $estimate['low'],
+            'estimated_wait_high' => $estimate['high'],
+            'estimate_source' => $estimate['source'],
         ]);
     }
 
     /**
-     * Average consult time from today's completed entries × people ahead,
-     * falling back to a flat estimate before any data exists for the day.
+     * Delegates to the trained wait-time model, which falls back to the
+     * original people-ahead x mean-consult heuristic when no model is
+     * active or the active one was fitted on too little history.
+     *
+     * @return array{minutes: int, low: int, high: int, source: string, model_version: int|null}
      */
-    private function estimatedWaitMinutes(Carbon $date, int $peopleAhead): int
+    private function estimatedWait(Carbon $date, int $peopleAhead, bool $isAppointment = false): array
     {
-        if ($peopleAhead === 0) {
-            return 0;
-        }
-
-        $completedToday = QueueEntry::where('queue_date', $date)
-            ->where('status', 'done')
-            ->whereNotNull('called_at')
-            ->whereNotNull('completed_at')
-            ->get();
-
-        $avgMinutes = $completedToday->isEmpty()
-            ? 5
-            : $completedToday->avg(fn (QueueEntry $entry) => $entry->called_at->diffInMinutes($entry->completed_at));
-
-        return (int) round($peopleAhead * max($avgMinutes, 1));
+        return $this->waitTimePredictor->predict($date, $peopleAhead, $isAppointment);
     }
 
     /**
@@ -404,6 +410,9 @@ class QueueController extends Controller
      */
     private function broadcastQueue(Carbon $date): void
     {
+        // Statuses have just changed; the estimates below must see them.
+        $this->waitTimePredictor->refresh();
+
         $entries = $this->entriesFor($date);
 
         $this->safeBroadcast(new QueueUpdated(
@@ -423,13 +432,19 @@ class QueueController extends Controller
 
         foreach ($entries as $entry) {
             $isWaiting = $entry->status === 'waiting';
+            $estimate = $isWaiting
+                ? $this->estimatedWait($date, $peopleAhead, $entry->source === 'appointment')
+                : null;
 
             $this->safeBroadcast(new QueueEntryUpdated($entry->patient_id, [
                 'date' => $date->toDateString(),
                 'entry' => $this->formatEntry($entry),
                 'position' => $isWaiting ? $peopleAhead + 1 : null,
                 'people_ahead' => $isWaiting ? $peopleAhead : null,
-                'estimated_wait_minutes' => $isWaiting ? $this->estimatedWaitMinutes($date, $peopleAhead) : null,
+                'estimated_wait_minutes' => $estimate['minutes'] ?? null,
+                'estimated_wait_low' => $estimate['low'] ?? null,
+                'estimated_wait_high' => $estimate['high'] ?? null,
+                'estimate_source' => $estimate['source'] ?? null,
             ]));
 
             if ($isWaiting) {

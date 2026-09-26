@@ -87,6 +87,13 @@ class CertificateController extends Controller
             Storage::put($certificate->file_path, $this->render($certificate));
         }
 
+        // Handing out a medical document is a PHI access event — record who
+        // pulled which certificate, staff or patient alike.
+        app(AuditLogger::class)->log($request->user()->id, 'certificate.downloaded', $certificate, [
+            'visit_record_id' => $visit->id,
+            'certificate_no' => $certificate->certificate_no,
+        ]);
+
         return Storage::download($certificate->file_path, $certificate->certificate_no.'.pdf', [
             'Content-Type' => 'application/pdf',
         ]);
