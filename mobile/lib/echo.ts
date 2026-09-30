@@ -22,7 +22,10 @@ export async function getEcho() {
     Pusher,
     key: process.env.EXPO_PUBLIC_REVERB_APP_KEY,
     wsHost: process.env.EXPO_PUBLIC_REVERB_HOST,
+    // pusher-js dials wsPort for ws:// but wssPort for wss://, which
+    // defaults to 443 — so without both, TLS on any other port is ignored.
     wsPort: Number(process.env.EXPO_PUBLIC_REVERB_PORT ?? 8080),
+    wssPort: Number(process.env.EXPO_PUBLIC_REVERB_PORT ?? 443),
     forceTLS: process.env.EXPO_PUBLIC_REVERB_SCHEME === 'https',
     enabledTransports: ['ws', 'wss'],
     authEndpoint,

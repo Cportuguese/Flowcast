@@ -17,6 +17,18 @@ class BoardHoursTest extends TestCase
         parent::tearDown();
     }
 
+    /**
+     * The board compares now()'s wall clock against schedule rows that hold
+     * plain local times. Carbon::setTestNow() below is interpreted in the app
+     * timezone, so every test in this file passes on UTC too — this is the
+     * assertion that catches the config drifting back and the board reporting
+     * "closed" through the whole clinic morning.
+     */
+    public function test_app_runs_on_the_clinics_own_timezone(): void
+    {
+        $this->assertSame('Asia/Manila', config('app.timezone'));
+    }
+
     public function test_board_reports_open_during_todays_hours(): void
     {
         Carbon::setTestNow('2026-09-21 10:00:00'); // a Monday

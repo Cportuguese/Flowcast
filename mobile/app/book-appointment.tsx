@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -11,6 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../lib/api';
+import { extractErrorMessage } from '../lib/errors';
 
 interface ClinicSchedule {
   day_of_week: number;
@@ -71,14 +71,6 @@ export default function BookAppointment() {
       })
       .catch(() => setOpenWeekdays(new Set()));
   }, []);
-
-  function extractErrorMessage(err: unknown, fallback: string) {
-    if (axios.isAxiosError(err) && err.response) {
-      const data = err.response.data as { message?: string };
-      return data.message ?? fallback;
-    }
-    return fallback;
-  }
 
   async function handleSelectDate(date: Date) {
     const key = dateKey(date);

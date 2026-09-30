@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../lib/api';
+import { extractErrorMessage } from '../lib/errors';
 
 const inputClass = 'rounded-lg border border-slate-300 px-3 py-3 text-sm';
 
@@ -38,13 +38,7 @@ export default function ChangePassword() {
       });
       setIsDone(true);
     } catch (err) {
-      if (axios.isAxiosError(err) && err.response?.status === 422) {
-        const data = err.response.data as { message?: string; errors?: Record<string, string[]> };
-        const firstError = data.errors ? Object.values(data.errors)[0]?.[0] : undefined;
-        setError(firstError ?? data.message ?? 'Unable to update the password.');
-      } else {
-        setError('Unable to update the password.');
-      }
+      setError(extractErrorMessage(err, 'Unable to update the password.'));
     } finally {
       setIsSubmitting(false);
     }

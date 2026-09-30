@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
+import { formatClock, todayIso } from '../lib/dates'
 import { getEcho } from '../lib/echo'
 
 interface BoardEntry {
@@ -45,14 +46,9 @@ function useClock() {
   return now
 }
 
-function formatClock(time: string) {
-  const [h, m] = time.split(':')
-  return new Date(2000, 0, 1, Number(h), Number(m)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-}
-
 function nextOpeningLabel(next: BoardHours['next_opening']) {
   if (!next) return 'Check back for opening hours'
-  const isToday = next.date === new Date().toISOString().slice(0, 10)
+  const isToday = next.date === todayIso()
   return `Opens ${isToday ? 'today' : next.day} at ${formatClock(next.start_time)}`
 }
 

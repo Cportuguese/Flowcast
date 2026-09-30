@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
@@ -7,6 +6,7 @@ import { OfflineNotice } from '../../components/OfflineNotice';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { api } from '../../lib/api';
 import { fetchWithCache, isNetworkError } from '../../lib/cache';
+import { extractErrorMessage } from '../../lib/errors';
 
 interface Appointment {
   id: number;
@@ -134,12 +134,7 @@ export default function MyAppointments() {
       await api.post(`/appointments/${id}/cancel`);
       await load();
     } catch (err) {
-      if (axios.isAxiosError(err) && err.response) {
-        const data = err.response.data as { message?: string };
-        setError(data.message ?? 'Unable to cancel this appointment.');
-      } else {
-        setError('Unable to cancel this appointment.');
-      }
+      setError(extractErrorMessage(err, 'Unable to cancel this appointment.'));
     } finally {
       setCancellingId(null);
     }

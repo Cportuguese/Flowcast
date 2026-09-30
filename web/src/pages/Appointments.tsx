@@ -1,6 +1,7 @@
-import axios from 'axios'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api'
+import { todayIso } from '../lib/dates'
+import { extractErrorMessage } from '../lib/errors'
 import { PageHeader } from '../components/PageHeader'
 import { StatusPill, type StatusTone } from '../components/StatusPill'
 
@@ -21,22 +22,9 @@ const STATUS_TONES: Record<Appointment['status'], StatusTone> = {
   no_show: 'danger',
 }
 
-function todayString() {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-}
-
-function extractErrorMessage(err: unknown, fallback: string) {
-  if (axios.isAxiosError(err) && err.response) {
-    const data = err.response.data as { message?: string }
-    return data.message ?? fallback
-  }
-  return fallback
-}
-
 export function Appointments() {
 
-  const [date, setDate] = useState(todayString())
+  const [date, setDate] = useState(todayIso)
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

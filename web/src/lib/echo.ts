@@ -21,7 +21,10 @@ export function getEcho() {
       broadcaster: 'reverb',
       key: import.meta.env.VITE_REVERB_APP_KEY,
       wsHost: import.meta.env.VITE_REVERB_HOST,
+      // pusher-js dials wsPort for ws:// but wssPort for wss://, which
+      // defaults to 443 — so without both, TLS on any other port is ignored.
       wsPort: Number(import.meta.env.VITE_REVERB_PORT ?? 8080),
+      wssPort: Number(import.meta.env.VITE_REVERB_PORT ?? 443),
       forceTLS: import.meta.env.VITE_REVERB_SCHEME === 'https',
       enabledTransports: ['ws', 'wss'],
       authEndpoint,

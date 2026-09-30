@@ -4,6 +4,7 @@ import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'rec
 import { PageHeader } from '../../components/PageHeader'
 import { StatTile } from '../../components/StatTile'
 import { api } from '../../lib/api'
+import { formatClock, formatShortDate, formatTime, todayIso } from '../../lib/dates'
 import { CHART_COLORS } from '../../lib/theme'
 import { useTodayQueue } from '../../lib/useTodayQueue'
 
@@ -50,25 +51,8 @@ interface AuditEntry {
 const SPARKLINE_DAYS = 7
 const ACTIVITY_LIMIT = 5
 
-function todayIso() {
-  return new Date().toISOString().slice(0, 10)
-}
-
 function currentMonth() {
   return todayIso().slice(0, 7)
-}
-
-function formatShortDate(iso: string) {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric' })
-}
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-function formatClock(time: string) {
-  const [h, m] = time.split(':')
-  return new Date(2000, 0, 1, Number(h), Number(m)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
 /** "queue.called" -> "called", "event_day.created" -> "event day created". */

@@ -1,6 +1,6 @@
-import axios from 'axios'
 import { useState, type FormEvent } from 'react'
 import { api } from '../lib/api'
+import { extractErrorMessage } from '../lib/errors'
 import { PageHeader } from '../components/PageHeader'
 import { buttonClass } from '../components/Button'
 
@@ -12,14 +12,6 @@ interface AuditLogEntry {
   model_id: number | null
   changes: Record<string, unknown> | null
   created_at: string
-}
-
-function extractErrorMessage(err: unknown, fallback: string) {
-  if (axios.isAxiosError(err) && err.response) {
-    const data = err.response.data as { message?: string }
-    return data.message ?? fallback
-  }
-  return fallback
 }
 
 export function AuditLog() {

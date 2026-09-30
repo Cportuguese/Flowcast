@@ -1,4 +1,3 @@
-import axios from 'axios'
 import { useEffect, useState } from 'react'
 import {
   Area,
@@ -16,6 +15,8 @@ import {
   YAxis,
 } from 'recharts'
 import { api } from '../lib/api'
+import { formatShortDate } from '../lib/dates'
+import { extractErrorMessage } from '../lib/errors'
 import { PageHeader } from '../components/PageHeader'
 import { CHART_COLORS } from '../lib/theme'
 import { StatTile } from '../components/StatTile'
@@ -118,11 +119,6 @@ function formatHour(hour: number): string {
   return `${displayHour} ${period}`
 }
 
-function formatShortDate(dateStr: string): string {
-  const date = new Date(`${dateStr}T00:00:00`)
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-}
-
 function formatFeatureName(feature: string): string {
   return feature.replace(/_/g, ' ').replace(/\bdow (\d)\b/, (_, day) => `weekday ${day}`)
 }
@@ -151,14 +147,6 @@ function buildVolumeChartData(series: VolumeForecast['series']) {
   }
 
   return rows
-}
-
-function extractErrorMessage(err: unknown, fallback: string) {
-  if (axios.isAxiosError(err) && err.response) {
-    const data = err.response.data as { message?: string }
-    return data.message ?? fallback
-  }
-  return fallback
 }
 
 function formatTrainedAt(value: string | null): string {

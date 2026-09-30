@@ -68,7 +68,7 @@ class CertificateController extends Controller
     /** Certificate metadata for a visit, or 404 if none has been issued. */
     public function show(Request $request, VisitRecord $visit)
     {
-        $this->authorizeView($request, $visit);
+        $this->abortUnlessStaffOrOwner($request->user(), $visit->patient_id);
 
         $certificate = $visit->certificate()->firstOrFail();
 
@@ -78,7 +78,7 @@ class CertificateController extends Controller
     /** The PDF itself. */
     public function download(Request $request, VisitRecord $visit)
     {
-        $this->authorizeView($request, $visit);
+        $this->abortUnlessStaffOrOwner($request->user(), $visit->patient_id);
 
         $certificate = $visit->certificate()->firstOrFail();
 
@@ -110,16 +110,6 @@ class CertificateController extends Controller
             'issuer' => $certificate->issuedBy,
             'clinic' => config('clinic'),
         ])->setPaper('a4')->output();
-    }
-
-    private function authorizeView(Request $request, VisitRecord $visit): void
-    {
-        $user = $request->user();
-        $isStaff = in_array($user->role, ['admin', 'personnel'], true);
-
-        if (! $isStaff && $visit->patient_id !== $user->id) {
-            abort(403, 'This action is unauthorized.');
-        }
     }
 
     /**

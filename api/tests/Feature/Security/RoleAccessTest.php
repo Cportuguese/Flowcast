@@ -10,6 +10,8 @@ use App\Models\QueueEntry;
 use App\Models\User;
 use App\Models\VisitRecord;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Routing\Route as RegisteredRoute;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -48,8 +50,6 @@ class RoleAccessTest extends TestCase
             'user' => ['GET', '/api/user', self::ALL],
             'push-token' => ['PATCH', '/api/user/push-token', self::ALL],
             'password' => ['PATCH', '/api/user/password', self::ALL],
-            'admin ping' => ['GET', '/api/admin/ping', ['admin']],
-            'personnel ping' => ['GET', '/api/personnel/ping', self::STAFF],
 
             // Phase 2 — schedules & appointments
             'schedules index' => ['GET', '/api/admin/schedules', ['admin']],
@@ -73,7 +73,7 @@ class RoleAccessTest extends TestCase
             'queue walk-in' => ['POST', '/api/admin/queue/walk-in', self::STAFF],
             'queue complete' => ['PATCH', '/api/admin/queue/{queueEntry}/complete', self::STAFF],
             'queue skip' => ['PATCH', '/api/admin/queue/{queueEntry}/skip', self::STAFF],
-            'queue history' => ['GET', '/api/queue/2026-01-01/history', ['admin']],
+            'queue history' => ['GET', '/api/queue/{date}/history', ['admin']],
 
             // Phase 4 — visits
             'visits store' => ['POST', '/api/visits', self::STAFF],
@@ -145,6 +145,33 @@ class RoleAccessTest extends TestCase
     }
 
     /**
+     * The matrix is only a guarantee if it is complete, and nothing until now
+     * made it so: an endpoint could ship with no row here and CI stayed green.
+     * This asserts the matrix lines up 1:1 with what the router actually
+     * serves, so the omission fails instead of passing quietly.
+     */
+    public function test_matrix_covers_every_authenticated_api_route(): void
+    {
+        $registered = collect(Route::getRoutes())
+            ->filter(fn (RegisteredRoute $route) => str_starts_with($route->uri(), 'api/')
+                && in_array('auth:sanctum', $route->gatherMiddleware(), true))
+            ->flatMap(fn (RegisteredRoute $route) => collect($route->methods())
+                ->reject(fn (string $method) => $method === 'HEAD')
+                ->map(fn (string $method) => $method.' /'.$route->uri()))
+            ->unique()->sort()->values()->all();
+
+        $covered = collect(self::routes())
+            ->map(fn (array $row) => $row[0].' '.$row[1])
+            ->unique()->sort()->values()->all();
+
+        $this->assertSame(
+            $registered,
+            $covered,
+            'Every authenticated /api route needs exactly one row in RoleAccessTest::routes(), and vice versa.',
+        );
+    }
+
+    /**
      * Swap route placeholders for real rows. Owned rows belong to the acting
      * user where ownership matters, so an allowed role isn't tripped by a
      * 403 from the controller's own ownership check.
@@ -156,6 +183,10 @@ class RoleAccessTest extends TestCase
         }
 
         $patient = $actor && $actor->role === 'patient' ? $actor : User::factory()->patient()->create();
+
+        if (str_contains($uri, '{date}')) {
+            return str_replace('{date}', '2026-01-01', $uri);
+        }
 
         if (str_contains($uri, '{eventDay}')) {
             $id = EventDay::create(['date' => today()->addDays(rand(1, 3000)), 'label' => 'x'])->id;

@@ -1,5 +1,4 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import axios from 'axios';
 import { Link, router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -19,6 +18,7 @@ import { useAuth } from '../../context/AuthContext';
 import { api } from '../../lib/api';
 import { fetchWithCache, isNetworkError } from '../../lib/cache';
 import { getEcho } from '../../lib/echo';
+import { extractErrorMessage } from '../../lib/errors';
 import { registerForQueuePushNotifications } from '../../lib/notifications';
 
 interface QueueEntry {
@@ -211,12 +211,7 @@ export default function Home() {
       setPeopleAhead(null);
       setEstimatedWaitMinutes(null);
     } catch (err) {
-      if (axios.isAxiosError(err) && err.response) {
-        const data = err.response.data as { message?: string };
-        setError(data.message ?? 'Unable to check in.');
-      } else {
-        setError('Unable to check in.');
-      }
+      setError(extractErrorMessage(err, 'Unable to check in.'));
     } finally {
       setIsCheckingIn(false);
     }

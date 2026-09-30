@@ -7,5 +7,5 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
 });
 
 Broadcast::channel('queue.{date}.staff', function ($user) {
-    return in_array($user->role, ['admin', 'personnel'], true);
+    return $user->isStaff();
 });

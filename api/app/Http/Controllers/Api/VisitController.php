@@ -15,6 +15,21 @@ use Illuminate\Validation\Rule;
 class VisitController extends Controller
 {
     /**
+     * Every relation formatVisit() reads, including the certificate's issuer
+     * that CertificateController::format() reaches for. A listing endpoint
+     * eager-loads this whole list, because loadMissing() inside the formatter
+     * would otherwise fire four more queries per row.
+     *
+     * @var array<int, string>
+     */
+    private const VISIT_RELATIONS = [
+        'patient:id,name,school_id',
+        'createdBy:id,name',
+        'inventoryLogs.medicine:id,name,unit',
+        'certificate.issuedBy:id,name',
+    ];
+
+    /**
      * Create the visit record for a queue entry, personnel/admin only.
      * One record per queue entry (enforced by a unique constraint).
      *
@@ -79,7 +94,7 @@ class VisitController extends Controller
     {
         $visit = VisitRecord::where('queue_entry_id', $queueEntry->id)->firstOrFail();
 
-        $this->authorizeView($request, $visit);
+        $this->abortUnlessStaffOrOwner($request->user(), $visit->patient_id);
 
         return response()->json($this->formatVisit($visit));
     }
@@ -99,7 +114,7 @@ class VisitController extends Controller
             return response()->json(['message' => 'Provide at least one of school_id, patient_id, or date.'], 422);
         }
 
-        $query = VisitRecord::with('patient:id,name,school_id')->orderByDesc('created_at');
+        $query = VisitRecord::with(self::VISIT_RELATIONS)->orderByDesc('created_at');
 
         if (! empty($validated['school_id'])) {
             $query->whereHas('patient', fn ($q) => $q->where('school_id', $validated['school_id']));
@@ -135,22 +150,12 @@ class VisitController extends Controller
         ])->values());
     }
 
-    private function authorizeView(Request $request, VisitRecord $visit): void
-    {
-        $user = $request->user();
-        $isStaff = in_array($user->role, ['admin', 'personnel'], true);
-
-        if (! $isStaff && $visit->patient_id !== $user->id) {
-            abort(403, 'This action is unauthorized.');
-        }
-    }
-
     /**
      * @return array<string, mixed>
      */
     private function formatVisit(VisitRecord $visit): array
     {
-        $visit->loadMissing('patient:id,name,school_id', 'createdBy:id,name', 'inventoryLogs.medicine:id,name,unit', 'certificate');
+        $visit->loadMissing(self::VISIT_RELATIONS);
 
         // A dispense can span two batches (two log rows); show it once.
         $medicines = $visit->inventoryLogs

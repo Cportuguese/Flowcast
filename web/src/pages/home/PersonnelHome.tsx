@@ -6,6 +6,7 @@ import { StatTile } from '../../components/StatTile'
 import { StatusPill, type StatusTone } from '../../components/StatusPill'
 import { VisitFormModal } from '../../components/VisitFormModal'
 import { api } from '../../lib/api'
+import { formatTime, todayIso } from '../../lib/dates'
 import { extractErrorMessage } from '../../lib/errors'
 import type { QueueEntry } from '../../lib/queue'
 import { timeInQueue, useTodayQueue } from '../../lib/useTodayQueue'
@@ -41,14 +42,6 @@ const APPT_TONES: Record<Appointment['status'], StatusTone> = {
 
 const UP_NEXT_LIMIT = 5
 const APPOINTMENTS_LIMIT = 6
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
 
 function isOpen(appt: Appointment) {
   return appt.status === 'booked' || appt.status === 'checked_in'

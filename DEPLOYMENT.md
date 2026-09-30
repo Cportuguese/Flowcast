@@ -14,6 +14,12 @@ first production deploy, and again after any infrastructure change.
 | `APP_ENV` | `production` | Disables dev-only behaviour. |
 | `APP_DEBUG` | `false` | **Required.** `true` leaks stack traces, config and DB credentials on any error. |
 | `APP_URL` | `https://<api-domain>` | Used in generated links. |
+| `APP_TIMEZONE` | `Asia/Manila` | The clinic's own timezone. `clinic_schedules` holds wall-clock times, so on UTC the TV board's open/closed state and every analytics hour label are eight hours out. |
+| `BROADCAST_CONNECTION` | `reverb` | **Required.** With `log` (Laravel's default) every live update is silently written to the log file instead — no error anywhere, the TV board and patient queue screens just never move. |
+| `DB_CONNECTION`, `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` | `mysql` + credentials | Development and the demo history run on MySQL. |
+| `REVERB_APP_ID`, `REVERB_APP_KEY` | from `php artisan reverb:install` | The key is not secret (it ships inside both apps) but `VITE_REVERB_APP_KEY` in the web build and `EXPO_PUBLIC_REVERB_APP_KEY` in the mobile build must equal it, or every WebSocket is refused. |
+| `REVERB_HOST`, `REVERB_PORT` | `<api-domain>`, `443` | Where the API publishes events to Reverb (through the TLS proxy). |
+| `LOG_STACK`, `LOG_LEVEL` | `daily`, `warning` | The default `single` file grows for as long as the server runs; `daily` keeps 14 days (`LOG_DAILY_DAYS`). |
 | `CORS_ALLOWED_ORIGINS` | `https://<web-domain>` | Only the web app's origin. Comma-separate if there is more than one (e.g. a separate TV-board host). Must include whatever origin loads the web app or live queue updates break (`broadcasting/auth` is CORS-checked). |
 | `RATE_LIMIT_API` | `120` | Per authenticated user, per minute. |
 | `RATE_LIMIT_GUEST` | `300` | Per IP for unauthenticated requests. High on purpose: a campus network sits behind one NAT. |
@@ -58,9 +64,16 @@ Patients self-register from the mobile app.
 
 | Process | Command | Purpose |
 |---|---|---|
-| Scheduler | `php artisan schedule:run` every minute via cron, or `schedule:work` as a service | Prunes expired tokens daily; generates analytics snapshots. |
+| Scheduler | `php artisan schedule:run` every minute via cron, or `schedule:work` as a service | Prunes expired tokens daily; snapshots yesterday's queue at 00:05; retrains the forecasting models Sundays at 00:30. Times are in `APP_TIMEZONE`. Without it, forecasts never learn past the heuristic. |
 | Reverb | `php artisan reverb:start` behind TLS | Live queue / TV board updates. |
 | Queue worker | `php artisan queue:work` (only if any job is ever queued) | Currently nothing is queued; broadcasts are `ShouldBroadcastNow`. |
+
+### Outbound network
+
+Push notifications ("You're up!", "Almost your turn") are sent from the API
+to `https://exp.host`, so the server needs outbound HTTPS to it. Without it
+the pushes are skipped and logged as warnings; queue actions still succeed
+and patients still see every change on their queue screen.
 
 ### Files
 
@@ -75,6 +88,7 @@ Build with the production API and Reverb values in `web/.env`:
 
 ```sh
 VITE_API_URL=https://<api-domain>/api
+VITE_REVERB_APP_KEY=<same value as REVERB_APP_KEY>
 VITE_REVERB_HOST=<api-domain>
 VITE_REVERB_PORT=443
 VITE_REVERB_SCHEME=https
@@ -84,6 +98,10 @@ npm run build
 The build injects a **Content-Security-Policy** `<meta>` tag whose
 `connect-src` is derived from those values. If the API or WebSocket origin
 changes, rebuild. Extra origins go in `VITE_CSP_CONNECT_SRC` (comma-separated).
+
+These values are compiled in at build time. A `dist/` built on a development
+machine points at `127.0.0.1` — always rebuild with the production values
+rather than copying an existing `dist/`.
 
 Serve `dist/` as static files with SPA fallback (every unknown path → `index.html`).
 Serving it from the **same domain as the API** (e.g. API under `/api`) is
@@ -105,10 +123,24 @@ Referrer-Policy: strict-origin-when-cross-origin
 
 ```sh
 EXPO_PUBLIC_API_URL=https://<api-domain>/api
+EXPO_PUBLIC_REVERB_APP_KEY=<same value as REVERB_APP_KEY>
 EXPO_PUBLIC_REVERB_HOST=<api-domain>
 EXPO_PUBLIC_REVERB_PORT=443
 EXPO_PUBLIC_REVERB_SCHEME=https
 ```
+
+**Building with EAS (cloud).** EAS uploads only files git tracks, and
+`mobile/.env` is gitignored — so a cloud build never sees it and falls back
+to `127.0.0.1`. Put the values above in the production profile's `"env"`
+block in `eas.json` (they are compiled into the app anyway, so committing
+them is fine) or in EAS environment variables. A local release build does
+read `mobile/.env`.
+
+**Push notifications need an EAS project.** `app.json` has no
+`extra.eas.projectId` yet, and without one the app cannot obtain a push
+token — it fails quietly and the patient simply gets no pushes. Run
+`eas init` once (or let the first `eas build` link the project), then add
+Android FCM V1 credentials (and iOS APNs) with `eas credentials`.
 
 Tokens are stored in the device keychain (`expo-secure-store`) and expire
 after 30 days. Downloaded certificates are deleted from the app cache after
@@ -152,7 +184,7 @@ php artisan route:list                # every api/* route shows auth:sanctum + r
 curl -i https://<api-domain>/api/user # expect 401, JSON body, no stack trace
 
 # Web
-curl -s https://<web-domain>/ | grep -o 'Content-Security-Policy[^>]*'   # CSP present
+curl -s https://<web-domain>/ | grep -o 'connect-src[^;]*'   # must list the production API and wss:// origins, never 127.0.0.1
 ```
 
 ## 6. What the code already enforces (no action needed)
@@ -167,4 +199,4 @@ curl -s https://<web-domain>/ | grep -o 'Content-Security-Policy[^>]*'   # CSP p
   certificate issue + download.
 - Inventory stock-out is transactional, locked, never negative.
 - Clients tear down the WebSocket on logout and on any 401.
-- 198 automated tests including a route × role access matrix.
+- 258 automated tests, including a route × role access matrix that fails if any authenticated route lacks a row.

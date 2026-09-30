@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 import { AuthHeader } from '../components/AuthHeader';
 import { useAuth } from '../context/AuthContext';
+import { extractErrorMessage } from '../lib/errors';
 
 export default function Login() {
   const { login } = useAuth();
@@ -29,12 +29,7 @@ export default function Login() {
       await login(email, password);
       router.replace('/');
     } catch (err) {
-      if (axios.isAxiosError(err) && err.response) {
-        const data = err.response.data as { message?: string };
-        setError(data.message ?? 'Unable to log in.');
-      } else {
-        setError('Unable to log in.');
-      }
+      setError(extractErrorMessage(err, 'Unable to log in.'));
     } finally {
       setIsSubmitting(false);
     }

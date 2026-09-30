@@ -119,17 +119,4 @@ class InventoryService
             ]);
         });
     }
-
-    /**
-     * @return array{stock: int, status: string}
-     */
-    public function stockStatus(Medicine $medicine): array
-    {
-        $stock = $medicine->currentStock();
-
-        return [
-            'stock' => $stock,
-            'status' => $stock === 0 ? 'out' : ($stock <= $medicine->reorder_level ? 'low' : 'ok'),
-        ];
-    }
 }

@@ -68,6 +68,7 @@ class WaitTimePredictor
         $trained = TrainedModel::fromModel($model);
         $arrivedAt = $at ?? Carbon::now();
         $entries = $this->entriesFor($date);
+        [$minutesSinceOpen, $minutesUntilClose] = $this->scheduleOffsets($arrivedAt);
 
         $features = WaitTimeFeatures::build(
             arrivedAt: $arrivedAt,
@@ -75,8 +76,8 @@ class WaitTimePredictor
             inConsultation: $entries->where('status', 'in_consultation')->count(),
             activeStaff: $staffOverride ?? $this->activeStaffCount($entries),
             rollingConsultMean: $this->rollingConsultMean($entries),
-            minutesSinceOpen: $this->scheduleOffsets($arrivedAt)[0],
-            minutesUntilClose: $this->scheduleOffsets($arrivedAt)[1],
+            minutesSinceOpen: $minutesSinceOpen,
+            minutesUntilClose: $minutesUntilClose,
             isEventDay: EventDay::whereDate('date', $date)->exists(),
             isAppointment: $isAppointment,
         );

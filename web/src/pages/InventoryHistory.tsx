@@ -1,6 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../lib/api'
-import { extractErrorMessage, type Medicine } from '../lib/inventory'
+import { downloadCsv } from '../lib/csv'
+import { todayIso } from '../lib/dates'
+import { extractErrorMessage } from '../lib/errors'
+import type { Medicine } from '../lib/inventory'
 import { PageHeader } from '../components/PageHeader'
 import { StatusPill, type StatusTone } from '../components/StatusPill'
 import { buttonClass } from '../components/Button'
@@ -27,23 +30,6 @@ const TYPE_TONES: Record<InventoryLogEntry['type'], StatusTone> = {
   stock_in: 'success',
   stock_out: 'info',
   disposed: 'neutral',
-}
-
-function downloadCsv(filename: string, rows: Array<Array<string | number | null>>) {
-  const csv = rows
-    .map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
-    .join('\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10)
 }
 
 export function InventoryHistory() {

@@ -135,20 +135,4 @@ class TrainedModel
             residualStd: (float) ($model->residual_std ?? 0.0),
         );
     }
-
-    /**
-     * @return array<string, mixed>
-     */
-    public function toArray(): array
-    {
-        return [
-            'feature_names' => $this->featureNames,
-            'coefficients' => $this->coefficients,
-            'intercept' => $this->intercept,
-            'feature_means' => $this->featureMeans,
-            'feature_stds' => $this->featureStds,
-            'lambda' => $this->lambda,
-            'residual_std' => $this->residualStd,
-        ];
-    }
 }

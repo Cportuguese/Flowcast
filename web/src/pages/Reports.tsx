@@ -1,6 +1,8 @@
-import axios from 'axios'
 import { useState, type FormEvent } from 'react'
 import { api } from '../lib/api'
+import { downloadCsv } from '../lib/csv'
+import { todayIso } from '../lib/dates'
+import { extractErrorMessage } from '../lib/errors'
 import { PageHeader } from '../components/PageHeader'
 import { buttonClass } from '../components/Button'
 
@@ -47,31 +49,6 @@ interface PeakHoursByWeekdayResponse {
     hours: Array<{ hour: number; avg_arrivals: number }>
     peak_hour: number | null
   }>
-}
-
-function extractErrorMessage(err: unknown, fallback: string) {
-  if (axios.isAxiosError(err) && err.response) {
-    const data = err.response.data as { message?: string }
-    return data.message ?? fallback
-  }
-  return fallback
-}
-
-function downloadCsv(filename: string, rows: Array<Array<string | number | null>>) {
-  const csv = rows
-    .map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
-    .join('\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10)
 }
 
 export function Reports() {

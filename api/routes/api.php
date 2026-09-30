@@ -31,14 +31,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/user/password', [AuthController::class, 'updatePassword'])
         ->middleware('throttle:sensitive');
 
-    Route::get('/admin/ping', function () {
-        return response()->json(['message' => 'pong from admin route']);
-    })->middleware('role:admin');
-
-    Route::get('/personnel/ping', function () {
-        return response()->json(['message' => 'pong from personnel route']);
-    })->middleware('role:admin,personnel');
-
     Route::middleware('role:admin')->prefix('admin')->group(function () {
         Route::get('/schedules', [ScheduleController::class, 'index']);
         Route::post('/schedules', [ScheduleController::class, 'store']);

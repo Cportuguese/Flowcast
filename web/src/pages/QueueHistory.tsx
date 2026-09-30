@@ -1,23 +1,16 @@
-import axios from 'axios'
 import { useCallback, useEffect, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { StatusPill } from '../components/StatusPill'
 import { StatTile } from '../components/StatTile'
 import { api } from '../lib/api'
+import { formatTime, todayIso } from '../lib/dates'
+import { extractErrorMessage } from '../lib/errors'
 import {
   QUEUE_STATUS_LABELS,
   QUEUE_STATUS_TONES,
   minutesBetween,
   type QueueEntry,
 } from '../lib/queue'
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function formatTime(iso: string | null) {
-  return iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'
-}
 
 function formatMinutes(minutes: number | null) {
   return minutes === null ? '—' : `${minutes} min`
@@ -37,11 +30,7 @@ export function QueueHistory() {
       setEntries(response.data.entries)
     } catch (err) {
       setEntries([])
-      setError(
-        axios.isAxiosError(err) && err.response?.data?.message
-          ? String(err.response.data.message)
-          : 'Unable to load queue history.',
-      )
+      setError(extractErrorMessage(err, 'Unable to load queue history.'))
     } finally {
       setIsLoading(false)
     }

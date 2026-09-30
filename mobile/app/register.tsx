@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 import { AuthHeader } from '../components/AuthHeader';
 import { useAuth, type PatientType } from '../context/AuthContext';
+import { extractErrorMessage } from '../lib/errors';
 
 const PATIENT_TYPES: Array<{ value: PatientType; label: string }> = [
   { value: 'student', label: 'Student' },
@@ -46,13 +46,7 @@ export default function Register() {
       });
       router.replace('/');
     } catch (err) {
-      if (axios.isAxiosError(err) && err.response) {
-        const data = err.response.data as { message?: string; errors?: Record<string, string[]> };
-        const firstError = data.errors ? Object.values(data.errors)[0]?.[0] : undefined;
-        setError(firstError ?? data.message ?? 'Unable to register.');
-      } else {
-        setError('Unable to register.');
-      }
+      setError(extractErrorMessage(err, 'Unable to register.'));
     } finally {
       setIsSubmitting(false);
     }

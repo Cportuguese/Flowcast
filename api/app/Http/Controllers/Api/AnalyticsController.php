@@ -245,9 +245,14 @@ class AnalyticsController extends Controller
             ->count();
 
         $scenarios = [];
+        // Whether an estimate came from the model or the heuristic is a
+        // property of what is trained, not of the staffing assumption, so
+        // the first scenario's answer holds for all of them.
+        $source = null;
 
         foreach (self::WHAT_IF_STAFF_LEVELS as $staff) {
             $estimate = $this->waitTimePredictor->predict($today, $peopleAhead, staffOverride: $staff);
+            $source ??= $estimate['source'];
 
             $scenarios[] = [
                 'active_staff' => $staff,
@@ -260,7 +265,7 @@ class AnalyticsController extends Controller
         return response()->json([
             'date' => $today->toDateString(),
             'people_ahead' => $peopleAhead,
-            'source' => $scenarios === [] ? null : $this->waitTimePredictor->predict($today, $peopleAhead)['source'],
+            'source' => $source,
             'scenarios' => $scenarios,
         ]);
     }
@@ -347,7 +352,7 @@ class AnalyticsController extends Controller
             ->get();
 
         $points = $entries->map(fn (QueueEntry $entry) => [
-            'date' => Carbon::parse($entry->queue_date)->toDateString(),
+            'date' => $entry->queue_date->toDateString(),
             'queue_number' => $entry->queue_number,
             'predicted' => (int) $entry->predicted_wait_minutes,
             'actual' => (int) round($entry->joined_at->diffInMinutes($entry->called_at)),
@@ -499,7 +504,7 @@ class AnalyticsController extends Controller
      */
     private function busiestHour(array $hours): ?int
     {
-        if (empty($hours)) {
+        if ($hours === []) {
             return null;
         }
 

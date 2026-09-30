@@ -25,12 +25,30 @@ use Illuminate\Validation\Rule;
 
 class QueueController extends Controller
 {
+    /** Terminal statuses: an entry in one of these has left the queue. */
+    private const RESOLVED_STATUSES = ['done', 'skipped'];
+
+    /**
+     * Audit action per terminal status. Spelled out rather than derived from
+     * the status so the log keeps reading 'queue.completed' for 'done'.
+     */
+    private const RESOLVED_AUDIT_ACTIONS = ['done' => 'queue.completed', 'skipped' => 'queue.skipped'];
+
+    /**
+     * Patient columns loaded alongside queue entries. push_token is here for
+     * the "almost your turn" push in broadcastQueue(), not for display: every
+     * payload is built field by field in formatEntry(), so it is never sent
+     * to a client. Without it the notifier saw no token and silently skipped
+     * that push for every patient.
+     */
+    private const PATIENT_COLUMNS = 'patient:id,name,contact_no,push_token';
+
     public function __construct(private readonly WaitTimePredictor $waitTimePredictor) {}
 
     public function checkIn(Request $request)
     {
         $user = $request->user();
-        $isStaff = in_array($user->role, ['admin', 'personnel'], true);
+        $isStaff = $user->isStaff();
 
         $validated = $request->validate([
             // Only patient accounts belong in the queue — staff checking in
@@ -195,35 +213,34 @@ class QueueController extends Controller
 
     public function complete(Request $request, QueueEntry $queueEntry)
     {
-        if (in_array($queueEntry->status, ['done', 'skipped'], true)) {
-            return response()->json(['message' => 'This queue entry has already been resolved.'], 422);
-        }
-
-        $queueEntry->update([
-            'status' => 'done',
-            'completed_at' => now(),
-        ]);
-
-        app(AuditLogger::class)->log($request->user()->id, 'queue.completed', $queueEntry, [
-            'queue_number' => $queueEntry->queue_number,
-        ]);
-
-        $this->broadcastQueue($queueEntry->queue_date);
-
-        return response()->json($this->formatEntry($queueEntry));
+        return $this->resolve($request, $queueEntry, 'done');
     }
 
     public function skip(Request $request, QueueEntry $queueEntry)
     {
-        if (in_array($queueEntry->status, ['done', 'skipped'], true)) {
+        return $this->resolve($request, $queueEntry, 'skipped');
+    }
+
+    /**
+     * The two ways an entry leaves the queue. Both are one-way: an entry that
+     * has already been resolved is refused rather than resolved again, so a
+     * double-click cannot overwrite a completion with a skip.
+     *
+     * Only 'done' stamps completed_at — it is what consult duration is
+     * measured from, and a skipped patient was never consulted.
+     */
+    private function resolve(Request $request, QueueEntry $queueEntry, string $status)
+    {
+        if (in_array($queueEntry->status, self::RESOLVED_STATUSES, true)) {
             return response()->json(['message' => 'This queue entry has already been resolved.'], 422);
         }
 
         $queueEntry->update([
-            'status' => 'skipped',
+            'status' => $status,
+            ...$status === 'done' ? ['completed_at' => now()] : [],
         ]);
 
-        app(AuditLogger::class)->log($request->user()->id, 'queue.skipped', $queueEntry, [
+        app(AuditLogger::class)->log($request->user()->id, self::RESOLVED_AUDIT_ACTIONS[$status], $queueEntry, [
             'queue_number' => $queueEntry->queue_number,
         ]);
 
@@ -374,7 +391,7 @@ class QueueController extends Controller
     private function entriesFor(Carbon $date): Collection
     {
         return QueueEntry::where('queue_date', $date)
-            ->with('patient:id,name,contact_no')
+            ->with(self::PATIENT_COLUMNS)
             ->orderBy('queue_number')
             ->get();
     }
@@ -384,7 +401,7 @@ class QueueController extends Controller
      */
     private function formatEntry(QueueEntry $entry): array
     {
-        $entry->loadMissing('patient:id,name,contact_no');
+        $entry->loadMissing(self::PATIENT_COLUMNS);
 
         return [
             'id' => $entry->id,
@@ -397,9 +414,9 @@ class QueueController extends Controller
                 'name' => $entry->patient->name,
                 'contact_no' => $entry->patient->contact_no,
             ],
-            'joined_at' => optional($entry->joined_at)->toIso8601String(),
-            'called_at' => optional($entry->called_at)->toIso8601String(),
-            'completed_at' => optional($entry->completed_at)->toIso8601String(),
+            'joined_at' => $entry->joined_at?->toIso8601String(),
+            'called_at' => $entry->called_at?->toIso8601String(),
+            'completed_at' => $entry->completed_at?->toIso8601String(),
         ];
     }
 
