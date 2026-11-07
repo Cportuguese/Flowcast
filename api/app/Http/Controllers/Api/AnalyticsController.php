@@ -8,13 +8,16 @@ use App\Models\ClinicSchedule;
 use App\Models\EventDay;
 use App\Models\MlModel;
 use App\Models\QueueEntry;
+use App\Services\DepartmentBreakdown;
 use App\Services\Ml\ModelEvaluator;
 use App\Services\Ml\TrainedModel;
 use App\Services\Ml\VolumePredictor;
 use App\Services\Ml\WaitTimePredictor;
+use App\Support\Udd;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\Rule;
 
 class AnalyticsController extends Controller
 {
@@ -26,9 +29,6 @@ class AnalyticsController extends Controller
 
     /** How far back the online predicted-vs-actual comparison looks. */
     private const ONLINE_WINDOW_DAYS = 30;
-
-    /** Personnel counts offered by the staffing what-if. */
-    private const WHAT_IF_STAFF_LEVELS = [1, 2, 3];
 
     public function __construct(
         private readonly VolumePredictor $volumePredictor,
@@ -225,49 +225,25 @@ class AnalyticsController extends Controller
     }
 
     /**
-     * Predicted wait for someone joining the queue now, at each possible
-     * personnel count.
+     * Who came to the clinic, by department and course, and how each of the
+     * three professionals' days went — for a date range, optionally narrowed
+     * to one department.
      *
-     * Because the number of personnel on duty is a model input rather than
-     * something inferred after the fact, asking "what if a second nurse
-     * were on" costs nothing extra — it is the same model queried with one
-     * feature changed.
+     * Descriptive counts only. Department is deliberately kept out of the
+     * forecasting models: it says who came, not how long anyone waited.
      */
-    public function staffingWhatIf(Request $request)
+    public function breakdown(Request $request, DepartmentBreakdown $breakdown)
     {
         $validated = $request->validate([
-            'people_ahead' => ['nullable', 'integer', 'between:0,200'],
+            'from' => ['nullable', 'date_format:Y-m-d'],
+            'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
+            'department' => ['nullable', Rule::in(Udd::departmentCodes())],
         ]);
 
-        $today = Carbon::today();
-        $peopleAhead = $validated['people_ahead'] ?? QueueEntry::where('queue_date', $today)
-            ->where('status', 'waiting')
-            ->count();
+        $from = isset($validated['from']) ? Carbon::createFromFormat('Y-m-d', $validated['from'])->startOfDay() : Carbon::today();
+        $to = isset($validated['to']) ? Carbon::createFromFormat('Y-m-d', $validated['to'])->startOfDay() : $from->copy();
 
-        $scenarios = [];
-        // Whether an estimate came from the model or the heuristic is a
-        // property of what is trained, not of the staffing assumption, so
-        // the first scenario's answer holds for all of them.
-        $source = null;
-
-        foreach (self::WHAT_IF_STAFF_LEVELS as $staff) {
-            $estimate = $this->waitTimePredictor->predict($today, $peopleAhead, staffOverride: $staff);
-            $source ??= $estimate['source'];
-
-            $scenarios[] = [
-                'active_staff' => $staff,
-                'estimated_wait_minutes' => $estimate['minutes'],
-                'estimated_wait_low' => $estimate['low'],
-                'estimated_wait_high' => $estimate['high'],
-            ];
-        }
-
-        return response()->json([
-            'date' => $today->toDateString(),
-            'people_ahead' => $peopleAhead,
-            'source' => $source,
-            'scenarios' => $scenarios,
-        ]);
+        return response()->json($breakdown->build($from, $to, $validated['department'] ?? null));
     }
 
     /**

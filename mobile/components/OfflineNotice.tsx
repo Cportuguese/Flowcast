@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
+import { Text } from './Text';
 import { formatSavedAt } from '../lib/cache';
 
 // Shown above cached content so a stale queue number is never mistaken

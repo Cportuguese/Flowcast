@@ -88,7 +88,7 @@ class AuditLogControllerTest extends TestCase
 
     public function test_filters_by_patient_name(): void
     {
-        $patient = User::factory()->patient()->create(['name' => 'Juan Dela Cruz']);
+        $patient = User::factory()->patient()->create(['first_name' => 'Juan', 'middle_name' => null, 'last_name' => 'Dela Cruz']);
         $entry = QueueEntry::factory()->for($patient, 'patient')->create();
         $mine = AuditLog::factory()->create(['model_type' => 'QueueEntry', 'model_id' => $entry->id]);
 

@@ -21,12 +21,12 @@ class VisitDispensingTest extends TestCase
         $first = MedicineBatch::factory()->for($medicine)->expiresIn(30)->create(['quantity_received' => 4]);
         $second = MedicineBatch::factory()->for($medicine)->expiresIn(90)->create(['quantity_received' => 20]);
         $entry = QueueEntry::factory()->create();
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $this->postJson('/api/visits', [
             'queue_entry_id' => $entry->id,
             'complaint' => 'Headache',
-            'diagnosis' => 'Tension headache',
+            'intervention' => 'Tension headache',
             'medicines' => [['medicine_id' => $medicine->id, 'quantity' => 6]],
         ])->assertCreated()
             ->assertJsonCount(1, 'medicines')
@@ -47,12 +47,12 @@ class VisitDispensingTest extends TestCase
         $medicine = Medicine::factory()->create();
         MedicineBatch::factory()->for($medicine)->create(['quantity_received' => 2]);
         $entry = QueueEntry::factory()->create();
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $this->postJson('/api/visits', [
             'queue_entry_id' => $entry->id,
             'complaint' => 'Fever',
-            'diagnosis' => 'Viral',
+            'intervention' => 'Viral',
             'medicines' => [['medicine_id' => $medicine->id, 'quantity' => 3]],
         ])->assertUnprocessable()->assertJsonValidationErrors('quantity');
 
@@ -63,12 +63,12 @@ class VisitDispensingTest extends TestCase
     public function test_a_visit_without_medicines_still_saves(): void
     {
         $entry = QueueEntry::factory()->create();
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $this->postJson('/api/visits', [
             'queue_entry_id' => $entry->id,
             'complaint' => 'Check-up',
-            'diagnosis' => 'Well',
+            'intervention' => 'Well',
         ])->assertCreated()->assertJsonPath('medicines', []);
     }
 }

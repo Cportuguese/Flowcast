@@ -36,11 +36,11 @@ class ReportControllerTest extends TestCase
         $this->assertSame(1, $response->json('totals.skipped'));
     }
 
-    public function test_visit_summary_counts_and_top_diagnoses(): void
+    public function test_visit_summary_counts_and_top_complaints(): void
     {
-        $this->visitAt(Carbon::parse('2026-05-01 09:00'), ['diagnosis' => 'Common cold']);
-        $this->visitAt(Carbon::parse('2026-05-01 10:00'), ['diagnosis' => 'Common cold']);
-        $this->visitAt(Carbon::parse('2026-05-02 09:00'), ['diagnosis' => 'Sprain', 'referred_to' => 'Orthopedics']);
+        $this->visitAt(Carbon::parse('2026-05-01 09:00'), ['complaint' => 'Cough and colds']);
+        $this->visitAt(Carbon::parse('2026-05-01 10:00'), ['complaint' => 'Cough and colds']);
+        $this->visitAt(Carbon::parse('2026-05-02 09:00'), ['complaint' => 'Sprain', 'referred_to' => 'Orthopedics']);
 
         Sanctum::actingAs(User::factory()->admin()->create());
 
@@ -48,8 +48,8 @@ class ReportControllerTest extends TestCase
 
         $this->assertSame(3, $response->json('total_visits'));
         $this->assertSame(1, $response->json('referred_count'));
-        $this->assertSame('Common cold', $response->json('top_diagnoses.0.diagnosis'));
-        $this->assertSame(2, $response->json('top_diagnoses.0.count'));
+        $this->assertSame('Cough and colds', $response->json('top_complaints.0.complaint'));
+        $this->assertSame(2, $response->json('top_complaints.0.count'));
     }
 
     public function test_no_show_summary_counts_and_rate(): void

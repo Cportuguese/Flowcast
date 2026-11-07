@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { Fragment, useState, type FormEvent } from 'react'
 import { api } from '../lib/api'
 import { downloadCsv } from '../lib/csv'
 import { todayIso } from '../lib/dates'
@@ -30,7 +30,7 @@ interface VisitSummaryResponse {
   total_visits: number
   referred_count: number
   by_day: Array<{ date: string; count: number }>
-  top_diagnoses: Array<{ diagnosis: string; count: number }>
+  top_complaints: Array<{ complaint: string; count: number }>
 }
 
 interface NoShowSummaryResponse {
@@ -58,6 +58,7 @@ export function Reports() {
       <PageHeader title="Reports" className="print:hidden" />
 
       <QueueSummarySection />
+      <DepartmentSummarySection />
       <VisitSummarySection />
       <NoShowSummarySection />
       <PeakHoursByWeekdaySection />
@@ -190,6 +191,139 @@ function QueueSummarySection() {
   )
 }
 
+interface DepartmentCounts {
+  visited: number
+  served: number
+  skipped: number
+  no_shows: number
+  bookings: number
+}
+
+interface DepartmentSummaryResponse {
+  from: string
+  to: string
+  totals: DepartmentCounts
+  departments: Array<DepartmentCounts & { code: string; name: string; courses: Array<DepartmentCounts & { code: string | null; name: string }> }>
+}
+
+/**
+ * Who came to the clinic, per department and course, over a date range —
+ * the same counts as the Analytics page, in a printable report.
+ */
+function DepartmentSummarySection() {
+  const [dateFrom, setDateFrom] = useState(todayIso())
+  const [dateTo, setDateTo] = useState(todayIso())
+  const [data, setData] = useState<DepartmentSummaryResponse | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    setError(null)
+    setIsLoading(true)
+    try {
+      const response = await api.get<DepartmentSummaryResponse>('/analytics/breakdown', {
+        params: { from: dateFrom, to: dateTo },
+      })
+      setData(response.data)
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Unable to load the department summary.'))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  function handleCsv() {
+    if (!data) return
+    const header = ['Department', 'Course', 'Visited', 'Served', 'Skipped', 'No-shows', 'Bookings']
+    const rows = data.departments.flatMap((dept) => [
+      [dept.code, '', dept.visited, dept.served, dept.skipped, dept.no_shows, dept.bookings],
+      ...dept.courses
+        .filter((course) => course.visited + course.bookings + course.no_shows > 0)
+        .map((course) => [dept.code, course.code ?? 'Faculty/staff', course.visited, course.served, course.skipped, course.no_shows, course.bookings]),
+    ])
+    const totals = ['Total', '', data.totals.visited, data.totals.served, data.totals.skipped, data.totals.no_shows, data.totals.bookings]
+    downloadCsv(`department-summary-${data.from}-to-${data.to}.csv`, [header, ...rows, totals])
+  }
+
+  return (
+    <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm print:mb-8 print:border-0 print:shadow-none">
+      <div className="border-b border-slate-200 px-5 py-4">
+        <h2 className="text-sm font-semibold text-slate-900">Department summary</h2>
+        <p className="text-xs text-slate-500">Patients per department and course: visited, served, skipped and missed bookings.</p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3 border-b border-slate-100 p-5 print:hidden">
+        <div>
+          <label htmlFor="report-from-dept" className="mb-1 block text-xs font-medium text-slate-700">From</label>
+          <input id="report-from-dept" type="date" required value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded border border-slate-300 px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label htmlFor="report-to-dept" className="mb-1 block text-xs font-medium text-slate-700">To</label>
+          <input id="report-to-dept" type="date" required value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded border border-slate-300 px-3 py-2 text-sm" />
+        </div>
+        <button type="submit" disabled={isLoading} className={buttonClass.primary}>
+          {isLoading ? 'Running…' : 'Run'}
+        </button>
+        {data && <ReportActions onCsv={handleCsv} />}
+      </form>
+
+      {error && <p className="px-5 py-3 text-sm text-red-700">{error}</p>}
+
+      {data && (
+        <table className="w-full text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+            <tr>
+              <th className="px-4 py-3">Department / course</th>
+              <th className="px-4 py-3 text-right">Visited</th>
+              <th className="px-4 py-3 text-right">Served</th>
+              <th className="px-4 py-3 text-right">Skipped</th>
+              <th className="px-4 py-3 text-right">No-shows</th>
+              <th className="px-4 py-3 text-right">Bookings</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 tabular-nums">
+            {data.departments.map((dept) => (
+              <Fragment key={dept.code}>
+                <tr className="font-medium text-slate-900">
+                  <td className="px-4 py-2">
+                    {dept.code} <span className="text-xs font-normal text-slate-500">{dept.name}</span>
+                  </td>
+                  <td className="px-4 py-2 text-right">{dept.visited}</td>
+                  <td className="px-4 py-2 text-right">{dept.served}</td>
+                  <td className="px-4 py-2 text-right">{dept.skipped}</td>
+                  <td className="px-4 py-2 text-right">{dept.no_shows}</td>
+                  <td className="px-4 py-2 text-right">{dept.bookings}</td>
+                </tr>
+                {dept.courses
+                  .filter((course) => course.visited + course.bookings + course.no_shows > 0)
+                  .map((course) => (
+                    <tr key={`${dept.code}-${course.code}`} className="text-slate-600">
+                      <td className="px-4 py-1.5 pl-10">{course.code ?? 'Faculty/staff'}</td>
+                      <td className="px-4 py-1.5 text-right">{course.visited}</td>
+                      <td className="px-4 py-1.5 text-right">{course.served}</td>
+                      <td className="px-4 py-1.5 text-right">{course.skipped}</td>
+                      <td className="px-4 py-1.5 text-right">{course.no_shows}</td>
+                      <td className="px-4 py-1.5 text-right">{course.bookings}</td>
+                    </tr>
+                  ))}
+              </Fragment>
+            ))}
+            <tr className="bg-slate-50 font-semibold text-slate-900">
+              <td className="px-4 py-3">Total</td>
+              <td className="px-4 py-3 text-right">{data.totals.visited}</td>
+              <td className="px-4 py-3 text-right">{data.totals.served}</td>
+              <td className="px-4 py-3 text-right">{data.totals.skipped}</td>
+              <td className="px-4 py-3 text-right">{data.totals.no_shows}</td>
+              <td className="px-4 py-3 text-right">{data.totals.bookings}</td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+    </section>
+  )
+}
+
 function VisitSummarySection() {
   const [dateFrom, setDateFrom] = useState(todayIso())
   const [dateTo, setDateTo] = useState(todayIso())
@@ -269,15 +403,15 @@ function VisitSummarySection() {
             </table>
           </div>
           <div className="p-5">
-            <p className="text-xs font-medium uppercase text-slate-500">Top diagnoses</p>
+            <p className="text-xs font-medium uppercase text-slate-500">Top complaints</p>
             <ul className="mt-2 divide-y divide-slate-100">
-              {data.top_diagnoses.map((d) => (
-                <li key={d.diagnosis} className="flex items-center justify-between py-2 text-sm">
-                  <span className="text-slate-700">{d.diagnosis}</span>
+              {data.top_complaints.map((d) => (
+                <li key={d.complaint} className="flex items-center justify-between py-2 text-sm">
+                  <span className="text-slate-700">{d.complaint}</span>
                   <span className="font-medium text-slate-900">{d.count}</span>
                 </li>
               ))}
-              {data.top_diagnoses.length === 0 && <li className="py-2 text-sm text-slate-400">No visits in this range.</li>}
+              {data.top_complaints.length === 0 && <li className="py-2 text-sm text-slate-400">No visits in this range.</li>}
             </ul>
           </div>
         </div>

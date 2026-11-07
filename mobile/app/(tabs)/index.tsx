@@ -1,40 +1,46 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Link, router } from 'expo-router';
+import { Link, router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
-  Text,
   Vibration,
   View,
 } from 'react-native';
+import { Text } from '../../components/Text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AccountMenu, type MenuItem } from '../../components/AccountMenu';
 import { OfflineNotice } from '../../components/OfflineNotice';
 import { ScreenHeader } from '../../components/ScreenHeader';
-import { useAuth } from '../../context/AuthContext';
+import { hasCompleteHealthRecord, useAuth } from '../../context/AuthContext';
 import { api } from '../../lib/api';
+import {
+  LATE_GRACE_MINUTES,
+  STATUS_LABELS,
+  STATUS_STYLES,
+  minutesPastBooking,
+  peopleAheadText,
+  providerLine,
+  type Appointment,
+} from '../../lib/appointments';
 import { fetchWithCache, isNetworkError } from '../../lib/cache';
 import { getEcho } from '../../lib/echo';
 import { extractErrorMessage } from '../../lib/errors';
 import { registerForQueuePushNotifications } from '../../lib/notifications';
+import { useAppointmentUpdates } from '../../lib/realtime';
+import { formatLongDate, formatShortDay, formatTime } from '../../lib/time';
 
 interface QueueEntry {
   id: number;
   queue_number: number;
   status: 'waiting' | 'in_consultation' | 'done' | 'skipped';
   source: 'walk_in' | 'appointment';
+  booked_for: string | null;
   joined_at: string | null;
   called_at: string | null;
   completed_at: string | null;
-}
-
-interface Appointment {
-  id: number;
-  scheduled_at: string;
-  status: string;
 }
 
 interface BoardEntry {
@@ -49,6 +55,7 @@ interface QueuePayload {
   estimated_wait_minutes: number | null;
   estimated_wait_low: number | null;
   estimated_wait_high: number | null;
+  estimated_call_at: string | null;
 }
 
 const RESOLVED_COPY: Record<'done' | 'skipped', { title: string; subtitle: string }> = {
@@ -60,14 +67,6 @@ function firstName(name: string | undefined) {
   return name?.split(' ')[0] ?? '';
 }
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function formatDay(iso: string) {
-  return new Date(iso).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
-}
-
 /**
  * A single number implies a precision the estimate does not have, so show
  * the p10-p90 range the model actually produced and keep the point estimate
@@ -75,20 +74,77 @@ function formatDay(iso: string) {
  */
 function formatWaitEstimate(minutes: number | null, range: { low: number; high: number } | null) {
   if (range && range.high > range.low) {
-    return `~${range.low}–${range.high} min`;
+    return `${range.low}–${range.high} min`;
   }
   if (minutes !== null) {
-    return `~${minutes} min`;
+    return minutes === 0 ? 'Any moment' : `~${minutes} min`;
   }
-  return 'Calculating wait…';
+  return 'Calculating…';
 }
 
 function isToday(iso: string) {
   return new Date(iso).toDateString() === new Date().toDateString();
 }
 
+/**
+ * Today's confirmed booking with the nurse, before the patient checks in.
+ * Checking in on it keeps their place at the booked time, up to
+ * LATE_GRACE_MINUTES late; after that they join the line in order.
+ */
+function BookingCheckInCard({
+  appointment,
+  isCheckingIn,
+  onCheckIn,
+  onWalkIn,
+}: {
+  appointment: Appointment;
+  isCheckingIn: boolean;
+  onCheckIn: () => void;
+  onWalkIn: () => void;
+}) {
+  const late = minutesPastBooking(appointment);
+  const note =
+    late < 0
+      ? "Check in when you arrive and you'll be called at your booked time."
+      : late <= LATE_GRACE_MINUTES
+        ? 'Your time is now — check in to keep your place in line.'
+        : "Your booked time has passed. You can still check in; you'll join the line in order.";
+
+  return (
+    <View className="mt-8">
+      <View className="rounded-2xl border border-blue-200 bg-blue-50 p-6">
+        <Text className="text-xs font-medium uppercase tracking-wide text-blue-700">
+          Booked with {appointment.provider?.display_name ?? 'the nurse'} today
+        </Text>
+        <Text className="mt-1 text-3xl font-bold text-blue-900">{formatTime(appointment.scheduled_at)}</Text>
+        {late < 0 && appointment.people_ahead !== null && (
+          <Text className="text-sm text-blue-800">{peopleAheadText(appointment.people_ahead)}</Text>
+        )}
+        <Text className="mt-2 text-sm text-blue-800">{note}</Text>
+        <Pressable
+          onPress={onCheckIn}
+          disabled={isCheckingIn}
+          className="mt-4 items-center rounded-lg bg-blue-600 py-3.5 disabled:opacity-50"
+        >
+          {isCheckingIn ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <Text className="text-base font-semibold text-white">Check in for my appointment</Text>
+          )}
+        </Pressable>
+      </View>
+      <Pressable onPress={onWalkIn} disabled={isCheckingIn} hitSlop={8} className="mt-3 items-center py-1">
+        <Text className="text-sm text-slate-500">
+          Here for something else? <Text className="font-semibold text-slate-700">Check in as a walk-in</Text>
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export default function Home() {
   const { user, logout } = useAuth();
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const insets = useSafeAreaInsets();
 
   const [isLoading, setIsLoading] = useState(true);
@@ -99,12 +155,21 @@ export default function Home() {
   const [peopleAhead, setPeopleAhead] = useState<number | null>(null);
   const [estimatedWaitMinutes, setEstimatedWaitMinutes] = useState<number | null>(null);
   const [waitRange, setWaitRange] = useState<{ low: number; high: number } | null>(null);
+  const [estimatedCallAt, setEstimatedCallAt] = useState<string | null>(null);
   const [nowServing, setNowServing] = useState<number | null>(null);
   const [upcoming, setUpcoming] = useState<Appointment[]>([]);
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const subscribedRef = useRef(false);
+
+  // Re-render every minute: "your time is now" and "your time has passed"
+  // are read off the clock, and nothing else changes at that moment.
+  const [, setMinuteTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setMinuteTick((tick) => tick + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const applyQueue = useCallback((data: QueuePayload) => {
     setEntry(data.entry);
@@ -116,6 +181,7 @@ export default function Home() {
         ? { low: data.estimated_wait_low, high: data.estimated_wait_high }
         : null,
     );
+    setEstimatedCallAt(data.estimated_call_at ?? null);
   }, []);
 
   const loadMine = useCallback(async () => {
@@ -137,7 +203,7 @@ export default function Home() {
     try {
       const { data } = await fetchWithCache('appointments-upcoming', async () => {
         const response = await api.get<{ upcoming: Appointment[] }>('/appointments/mine');
-        return response.data.upcoming.filter((a) => a.status === 'booked');
+        return response.data.upcoming.filter((a) => a.status === 'booked' || a.status === 'pending');
       });
       setUpcoming(data);
     } catch {
@@ -157,14 +223,17 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    (async () => {
-      setIsLoading(true);
-      await Promise.all([loadMine(), loadAppointments(), loadBoard()]);
-      setIsLoading(false);
-    })();
-
     registerForQueuePushNotifications();
-  }, [loadMine, loadAppointments, loadBoard]);
+  }, []);
+
+  // Every time Home is shown, not just the first: tabs stay mounted, so a
+  // booking just made (or a visit just finished) would otherwise not show
+  // here until a pull to refresh.
+  useFocusEffect(
+    useCallback(() => {
+      Promise.all([loadMine(), loadAppointments(), loadBoard()]).finally(() => setIsLoading(false));
+    }, [loadMine, loadAppointments, loadBoard]),
+  );
 
   useEffect(() => {
     if (!user || subscribedRef.current) return;
@@ -193,6 +262,9 @@ export default function Home() {
     };
   }, [user, applyQueue, loadBoard]);
 
+  // The nurse confirmed or declined a booking, or the line ahead moved.
+  useAppointmentUpdates(user?.id, loadAppointments);
+
   async function handleRefresh() {
     await Promise.all([loadMine(), loadAppointments(), loadBoard()]);
   }
@@ -210,6 +282,8 @@ export default function Home() {
       setPosition(null);
       setPeopleAhead(null);
       setEstimatedWaitMinutes(null);
+      setEstimatedCallAt(null);
+      void loadAppointments();
     } catch (err) {
       setError(extractErrorMessage(err, 'Unable to check in.'));
     } finally {
@@ -217,20 +291,18 @@ export default function Home() {
     }
   }
 
-  function openAccountMenu() {
-    Alert.alert(user?.name ?? 'Account', user?.email, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Change password', onPress: () => router.push('/change-password') },
-      {
-        text: 'Log out',
-        style: 'destructive',
-        onPress: async () => {
-          await logout();
-          router.replace('/login');
-        },
+  const accountMenuItems: MenuItem[] = [
+    { label: 'My health record', onPress: () => router.push('/health-record') },
+    { label: 'Change password', onPress: () => router.push('/change-password') },
+    {
+      label: 'Log out',
+      destructive: true,
+      onPress: async () => {
+        await logout();
+        router.replace('/login');
       },
-    ]);
-  }
+    },
+  ];
 
   if (isLoading) {
     return (
@@ -240,11 +312,14 @@ export default function Home() {
     );
   }
 
-  const todaysAppointment = upcoming.find((a) => isToday(a.scheduled_at)) ?? null;
-  const nextAppointment = upcoming.find((a) => !isToday(a.scheduled_at)) ?? null;
+  const confirmedToday = upcoming.filter((a) => a.status === 'booked' && isToday(a.scheduled_at));
+  const queueBookingToday = confirmedToday.find((a) => a.goes_through_queue) ?? null;
+  const seenAtTimeToday = confirmedToday.filter((a) => !a.goes_through_queue);
+  const nextAppointment = upcoming.find((a) => !isToday(a.scheduled_at) || a.status === 'pending') ?? null;
   const isWaiting = entry?.status === 'waiting';
   const isCalled = entry?.status === 'in_consultation';
   const isResolved = entry?.status === 'done' || entry?.status === 'skipped';
+  const recordIncomplete = user !== null && !hasCompleteHealthRecord(user);
 
   return (
     <ScrollView
@@ -254,58 +329,84 @@ export default function Home() {
     >
       <View className="px-6">
         <ScreenHeader
-          title={`Hi, ${firstName(user?.name)}`}
-          subtitle={new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
+          title={`Hi, ${firstName(user?.first_name ?? user?.name)}`}
+          subtitle={formatLongDate(new Date().toISOString())}
           right={
-            <Pressable onPress={openAccountMenu} hitSlop={8} accessibilityLabel="Account">
+            <Pressable onPress={() => setAccountMenuOpen(true)} hitSlop={8} accessibilityLabel="Account">
               <Ionicons name="person-circle-outline" size={30} color="#64748b" />
             </Pressable>
           }
         />
 
+        <AccountMenu
+          visible={accountMenuOpen}
+          title={user?.name ?? 'Account'}
+          subtitle={user?.email}
+          items={accountMenuItems}
+          onClose={() => setAccountMenuOpen(false)}
+        />
+
         {offline && <OfflineNotice since={offline.since} />}
 
-        {error && (
-          <Text className="mt-6 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</Text>
+        {recordIncomplete && (
+          <Pressable onPress={() => router.push('/health-record')} className="mt-4 flex-row items-center gap-2 rounded-lg bg-amber-50 px-3 py-2.5">
+            <Ionicons name="alert-circle-outline" size={18} color="#b45309" />
+            <Text className="flex-1 text-xs text-amber-900">Complete your health record so you can book appointments.</Text>
+            <Ionicons name="chevron-forward" size={16} color="#b45309" />
+          </Pressable>
         )}
 
-        {/* STATE A — not in the queue */}
-        {!entry && (
-          <View className="mt-8">
-            <View className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
-              <Text className="text-lg font-semibold text-slate-900">You're not in line yet</Text>
-              <Text className="mt-1 text-sm text-slate-500">
-                Check in when you arrive at the clinic to get a queue number.
-              </Text>
-              <Pressable
-                onPress={() => handleCheckIn()}
-                disabled={isCheckingIn}
-                className="mt-5 items-center rounded-lg bg-brand py-3.5 disabled:opacity-50"
-              >
-                {isCheckingIn ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text className="text-base font-semibold text-white">Check in as walk-in</Text>
-                )}
-              </Pressable>
-            </View>
+        {error && <Text className="mt-6 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</Text>}
 
-            {todaysAppointment && (
-              <View className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-6">
-                <Text className="text-sm font-semibold text-blue-900">
-                  Appointment today at {formatTime(todaysAppointment.scheduled_at)}
-                </Text>
-                <Pressable
-                  onPress={() => handleCheckIn(todaysAppointment.id)}
-                  disabled={isCheckingIn}
-                  className="mt-3 items-center rounded-lg bg-blue-600 py-3 disabled:opacity-50"
-                >
-                  <Text className="font-semibold text-white">Check in for my appointment</Text>
-                </Pressable>
-              </View>
-            )}
+        {/* STATE A — not in the queue. A booking with the nurse today comes first. */}
+        {!entry && queueBookingToday && (
+          <BookingCheckInCard
+            appointment={queueBookingToday}
+            isCheckingIn={isCheckingIn}
+            onCheckIn={() => handleCheckIn(queueBookingToday.id)}
+            onWalkIn={() => handleCheckIn()}
+          />
+        )}
+
+        {!entry && !queueBookingToday && (
+          <View className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-6">
+            <Text className="text-lg font-semibold text-slate-900">You're not in line yet</Text>
+            <Text className="mt-1 text-sm text-slate-500">
+              Check in when you arrive at the clinic to get a queue number.
+            </Text>
+            <Pressable
+              onPress={() => handleCheckIn()}
+              disabled={isCheckingIn}
+              className="mt-5 items-center rounded-lg bg-brand py-3.5 disabled:opacity-50"
+            >
+              {isCheckingIn ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text className="text-base font-semibold text-white">Check in as walk-in</Text>
+              )}
+            </Pressable>
           </View>
         )}
+
+        {/* The dentist's and physician's patients come at their time, no queue number. */}
+        {seenAtTimeToday.map((appointment) => {
+          const timeHasCome = minutesPastBooking(appointment) >= 0;
+          return (
+            <View key={appointment.id} className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
+              <Text className="text-xs font-medium uppercase tracking-wide text-emerald-700">Today · {providerLine(appointment.provider)}</Text>
+              <Text className="mt-1 text-sm text-emerald-800">{timeHasCome ? 'Your booked time' : "You'll be served at"}</Text>
+              <Text className="text-3xl font-bold text-emerald-900">{formatTime(appointment.scheduled_at)}</Text>
+              {appointment.people_ahead !== null && (
+                <Text className="mt-1 text-base font-medium text-emerald-900">{peopleAheadText(appointment.people_ahead)}</Text>
+              )}
+              <Text className="mt-2 text-xs text-emerald-700">
+                {timeHasCome
+                  ? "If you haven't been called in yet, let the clinic staff know you're here."
+                  : 'No queue number needed — please be at the clinic by your time.'}
+              </Text>
+            </View>
+          );
+        })}
 
         {/* STATE B — waiting */}
         {entry && isWaiting && (
@@ -313,21 +414,33 @@ export default function Home() {
             <View className="items-center rounded-2xl border border-slate-200 bg-slate-50 p-8">
               <Text className="text-sm font-medium uppercase tracking-wide text-slate-500">Your number</Text>
               <Text className="mt-2 text-7xl font-bold text-slate-900">{entry.queue_number}</Text>
+              {entry.booked_for && (
+                <Text className="mt-2 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
+                  Booked for {formatTime(entry.booked_for)} — called at your booked time
+                </Text>
+              )}
               {peopleAhead !== null && (
                 <>
                   <Text className="mt-6 text-3xl font-bold text-blue-600">
                     {peopleAhead === 0 ? "You're next" : peopleAhead}
                   </Text>
                   <Text className="text-sm text-slate-500">
-                    {peopleAhead === 0 ? 'Please stay close by' : `people ahead of you`}
+                    {peopleAhead === 0 ? 'Please stay close by' : peopleAhead === 1 ? 'person ahead of you' : 'people ahead of you'}
                   </Text>
-                  <Text className="mt-2 text-xs text-slate-400">
-                    {formatWaitEstimate(estimatedWaitMinutes, waitRange)}
-                    {position !== null && ` · Position #${position}`}
-                  </Text>
+
+                  <View className="mt-6 w-full items-center rounded-xl bg-white px-4 py-4">
+                    <Text className="text-xs font-medium uppercase tracking-wide text-slate-500">Estimated wait</Text>
+                    <Text className="mt-1 text-3xl font-bold text-slate-900">{formatWaitEstimate(estimatedWaitMinutes, waitRange)}</Text>
+                    {estimatedCallAt && peopleAhead > 0 && (
+                      <Text className="mt-1 text-base text-slate-700">
+                        Likely called around <Text className="font-semibold">{formatTime(estimatedCallAt)}</Text>
+                      </Text>
+                    )}
+                    {position !== null && <Text className="mt-1 text-xs text-slate-400">Position #{position}</Text>}
+                  </View>
                   {waitRange !== null && (
-                    <Text className="mt-1 text-center text-xs text-slate-400">
-                      based on the current queue and today's pace
+                    <Text className="mt-2 text-center text-xs text-slate-400">
+                      Predicted from the current queue, today's pace and bookings due soon
                     </Text>
                   )}
                 </>
@@ -362,23 +475,24 @@ export default function Home() {
                 {RESOLVED_COPY[entry.status as 'done' | 'skipped'].subtitle}
               </Text>
             </View>
-            <Pressable
-              onPress={() => setEntry(null)}
-              className="mt-4 items-center rounded-lg border border-slate-300 py-3"
-            >
+            <Pressable onPress={() => setEntry(null)} className="mt-4 items-center rounded-lg border border-slate-300 py-3">
               <Text className="font-semibold text-slate-700">Back to check-in</Text>
             </Pressable>
           </View>
         )}
 
-        <Text className="mb-2 mt-10 text-sm font-semibold uppercase tracking-wide text-slate-500">
-          Next appointment
-        </Text>
+        <Text className="mb-2 mt-10 text-sm font-semibold uppercase tracking-wide text-slate-500">Next appointment</Text>
         {nextAppointment ? (
           <Link href="/(tabs)/appointments" asChild>
             <Pressable className="flex-row items-center justify-between rounded-xl border border-slate-200 p-4">
-              <Text className="text-sm font-medium text-slate-900">
-                {formatDay(nextAppointment.scheduled_at)} · {formatTime(nextAppointment.scheduled_at)}
+              <View className="flex-1">
+                <Text className="text-sm font-medium text-slate-900">
+                  {formatShortDay(nextAppointment.scheduled_at)} · {formatTime(nextAppointment.scheduled_at)}
+                </Text>
+                <Text className="mt-0.5 text-xs text-slate-500">{providerLine(nextAppointment.provider)}</Text>
+              </View>
+              <Text className={`mr-2 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[nextAppointment.status]}`}>
+                {STATUS_LABELS[nextAppointment.status]}
               </Text>
               <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
             </Pressable>

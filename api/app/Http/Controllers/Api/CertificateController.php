@@ -12,8 +12,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * Medical certificates for a visit. Personnel issue them (route-gated);
- * admin and the patient concerned can only view/download.
+ * Medical certificates for a visit. Any of the clinic's three professionals
+ * can issue one (route-gated to staff): the head nurse for any visit, the
+ * dentist and the school physician for the visits they recorded themselves.
+ * The patient concerned can view and download it.
  */
 class CertificateController extends Controller
 {
@@ -23,6 +25,10 @@ class CertificateController extends Controller
      */
     public function store(Request $request, VisitRecord $visit)
     {
+        if ($request->user()->role === 'personnel' && $visit->created_by_id !== $request->user()->id) {
+            abort(403, 'You can only issue certificates for visits you recorded.');
+        }
+
         $validated = $request->validate([
             'rest_days' => ['nullable', 'integer', 'min:0', 'max:30'],
             'remarks' => ['nullable', 'string', 'max:1000'],
@@ -68,8 +74,6 @@ class CertificateController extends Controller
     /** Certificate metadata for a visit, or 404 if none has been issued. */
     public function show(Request $request, VisitRecord $visit)
     {
-        $this->abortUnlessStaffOrOwner($request->user(), $visit->patient_id);
-
         $certificate = $visit->certificate()->firstOrFail();
 
         return response()->json(self::format($certificate));
@@ -78,8 +82,6 @@ class CertificateController extends Controller
     /** The PDF itself. */
     public function download(Request $request, VisitRecord $visit)
     {
-        $this->abortUnlessStaffOrOwner($request->user(), $visit->patient_id);
-
         $certificate = $visit->certificate()->firstOrFail();
 
         if (! Storage::exists($certificate->file_path)) {
@@ -87,8 +89,8 @@ class CertificateController extends Controller
             Storage::put($certificate->file_path, $this->render($certificate));
         }
 
-        // Handing out a medical document is a PHI access event — record who
-        // pulled which certificate, staff or patient alike.
+        // Handing out a medical document is a PHI access event — record which
+        // staff member pulled which certificate.
         app(AuditLogger::class)->log($request->user()->id, 'certificate.downloaded', $certificate, [
             'visit_record_id' => $visit->id,
             'certificate_no' => $certificate->certificate_no,
@@ -117,20 +119,22 @@ class CertificateController extends Controller
      *
      * @return array<string, mixed>
      */
-    public static function format(MedicalCertificate $certificate): array
+    public static function format(MedicalCertificate $certificate, bool $forPatient = false): array
     {
-        $certificate->loadMissing('issuedBy:id,name');
+        $certificate->loadMissing('issuedBy:id,name,role,profession');
 
-        return [
+        $payload = [
             'id' => $certificate->id,
             'certificate_no' => $certificate->certificate_no,
             'rest_days' => $certificate->rest_days,
             'remarks' => $certificate->remarks,
             'valid_from' => $certificate->valid_from->toDateString(),
             'valid_until' => $certificate->valid_until?->toDateString(),
-            'issued_by' => $certificate->issuedBy->name,
+            'issued_by' => $certificate->issuedBy->display_name,
             'issued_at' => $certificate->created_at->toIso8601String(),
-            'download_url' => "/visits/{$certificate->visit_record_id}/certificate/download",
         ];
+
+        // A patient is told one was issued, but gets the paper from the clinic.
+        return $forPatient ? $payload : [...$payload, 'download_url' => "/visits/{$certificate->visit_record_id}/certificate/download"];
     }
 }

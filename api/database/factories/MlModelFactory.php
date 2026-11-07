@@ -66,18 +66,17 @@ class MlModelFactory extends Factory
     }
 
     /**
-     * Weights shaped like the ones training actually produces: the
-     * queue-per-nurse ratio dominates and an extra nurse pulls the estimate
-     * down. A flat coefficient for every feature would make a model that
-     * technically predicts but behaves nothing like the real one, so tests
-     * built on it would prove nothing.
+     * Weights shaped like the ones training actually produces: the queue
+     * ahead dominates and bookings due soon push a walk-in's wait up. A flat
+     * coefficient for every feature would make a model that technically
+     * predicts but behaves nothing like the real one, so tests built on it
+     * would prove nothing.
      *
      * @var array<string, float>
      */
     private const WAIT_TIME_WEIGHTS = [
-        'people_ahead_per_staff' => 4.0,
-        'people_ahead' => 1.0,
-        'active_staff' => -1.5,
+        'people_ahead' => 4.0,
+        'bookings_due_next_hour' => 2.0,
         'rolling_consult_mean' => 0.8,
         'in_consultation' => 0.5,
     ];

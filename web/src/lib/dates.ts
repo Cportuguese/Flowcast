@@ -10,8 +10,14 @@
  * and therefore names the wrong day for eight hours of every Philippine day.
  */
 export function todayIso() {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  return isoDaysFromToday(0)
+}
+
+/** The local date `days` from today as YYYY-MM-DD (negative for the past). */
+export function isoDaysFromToday(days: number) {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
 /** An ISO timestamp as a local clock time, e.g. "09:05". */
@@ -22,6 +28,21 @@ export function formatTime(iso: string | null) {
 /** A YYYY-MM-DD date as "Sep 26". Parsed at local midnight, not UTC. */
 export function formatShortDate(iso: string) {
   return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+/** A YYYY-MM-DD date as "Mon, Oct 19, 2026". Parsed at local midnight, not UTC. */
+export function formatLongDate(iso: string) {
+  return new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+/** A YYYY-MM-DD birthdate as "Feb 14, 2005". */
+export function formatBirthdate(iso: string) {
+  return new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 /** A bare "HH:MM" or "HH:MM:SS" schedule time as "9:00 AM". */

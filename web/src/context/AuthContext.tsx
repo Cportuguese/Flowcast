@@ -2,11 +2,15 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { api, clearToken, getToken, onUnauthorized, setToken } from '../lib/api'
 import { disconnectEcho } from '../lib/echo'
 
-interface User {
+export interface User {
   id: number
   name: string
   email: string
   role: 'admin' | 'personnel' | 'patient'
+  // Staff only: "Nurse Portia" / "Head Nurse", "Dr. Marco Villanueva" / "Dentist".
+  profession: 'nurse' | 'dentist' | 'physician' | null
+  display_name: string
+  job_title: string | null
   [key: string]: unknown
 }
 

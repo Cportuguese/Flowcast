@@ -20,9 +20,9 @@ class MedicalCertificateTest extends TestCase
         Storage::fake('local');
     }
 
-    public function test_personnel_issues_a_certificate_and_the_pdf_is_stored(): void
+    public function test_the_head_nurse_issues_a_certificate_and_the_pdf_is_stored(): void
     {
-        $nurse = User::factory()->personnel()->create();
+        $nurse = User::factory()->nurse()->create(); // Portia, the admin account
         $visit = VisitRecord::factory()->create();
         Sanctum::actingAs($nurse);
 
@@ -34,7 +34,7 @@ class MedicalCertificateTest extends TestCase
         $response->assertCreated()
             ->assertJsonPath('certificate_no', 'MC-'.now()->year.'-0001')
             ->assertJsonPath('rest_days', 2)
-            ->assertJsonPath('issued_by', $nurse->name)
+            ->assertJsonPath('issued_by', "Nurse {$nurse->name}")
             ->assertJsonPath('valid_from', $visit->created_at->toDateString())
             ->assertJsonPath('valid_until', $visit->created_at->copy()->addDay()->toDateString());
 
@@ -51,7 +51,7 @@ class MedicalCertificateTest extends TestCase
 
     public function test_certificate_numbers_are_sequential_within_a_year(): void
     {
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $first = VisitRecord::factory()->create();
         $second = VisitRecord::factory()->create();
@@ -64,7 +64,7 @@ class MedicalCertificateTest extends TestCase
 
     public function test_a_visit_gets_only_one_certificate(): void
     {
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
         $visit = VisitRecord::factory()->create();
 
         $this->postJson("/api/visits/{$visit->id}/certificate")->assertCreated();
@@ -75,7 +75,7 @@ class MedicalCertificateTest extends TestCase
 
     public function test_no_rest_days_means_fit_to_return_with_no_end_date(): void
     {
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
         $visit = VisitRecord::factory()->create();
 
         $this->postJson("/api/visits/{$visit->id}/certificate", ['rest_days' => 0])
@@ -84,13 +84,25 @@ class MedicalCertificateTest extends TestCase
             ->assertJsonPath('valid_until', null);
     }
 
-    public function test_admin_cannot_issue_but_can_download(): void
+    public function test_the_dentist_issues_only_for_visits_they_recorded(): void
+    {
+        $dentist = User::factory()->dentist()->create();
+        $theirs = VisitRecord::factory()->create(['created_by_id' => $dentist->id]);
+        $someoneElses = VisitRecord::factory()->create();
+        Sanctum::actingAs($dentist);
+
+        $this->postJson("/api/visits/{$someoneElses->id}/certificate")->assertForbidden();
+
+        $this->postJson("/api/visits/{$theirs->id}/certificate")
+            ->assertCreated()
+            ->assertJsonPath('issued_by', "Dr. {$dentist->name}");
+    }
+
+    public function test_staff_can_download_any_certificate(): void
     {
         $certificate = MedicalCertificate::factory()->create();
         Storage::put($certificate->file_path, '%PDF-fake');
-        Sanctum::actingAs(User::factory()->admin()->create());
-
-        $this->postJson("/api/visits/{$certificate->visit_record_id}/certificate")->assertForbidden();
+        Sanctum::actingAs(User::factory()->physician()->create());
 
         $this->get("/api/visits/{$certificate->visit_record_id}/certificate/download")
             ->assertOk()
@@ -98,34 +110,50 @@ class MedicalCertificateTest extends TestCase
             ->assertDownload($certificate->certificate_no.'.pdf');
     }
 
-    public function test_patient_can_download_own_certificate_only(): void
+    /**
+     * Certificates come from the clinic: a patient cannot issue, view or
+     * download one through the app — not even their own.
+     */
+    public function test_a_patient_cannot_get_a_certificate_through_the_app(): void
     {
         $certificate = MedicalCertificate::factory()->create();
         Storage::put($certificate->file_path, '%PDF-fake');
-        $other = MedicalCertificate::factory()->create();
 
         Sanctum::actingAs($certificate->patient);
 
-        $this->getJson("/api/visits/{$certificate->visit_record_id}/certificate")
-            ->assertOk()
-            ->assertJsonPath('certificate_no', $certificate->certificate_no);
-        $this->get("/api/visits/{$certificate->visit_record_id}/certificate/download")->assertOk();
+        $this->getJson("/api/visits/{$certificate->visit_record_id}/certificate")->assertForbidden();
+        $this->get("/api/visits/{$certificate->visit_record_id}/certificate/download")->assertForbidden();
+        $this->postJson("/api/visits/{$certificate->visit_record_id}/certificate", ['rest_days' => 3])->assertForbidden();
+    }
 
-        $this->getJson("/api/visits/{$other->visit_record_id}/certificate")->assertForbidden();
-        $this->get("/api/visits/{$other->visit_record_id}/certificate/download")->assertForbidden();
+    public function test_a_patient_is_told_a_certificate_was_issued_but_gets_no_download_link(): void
+    {
+        $certificate = MedicalCertificate::factory()->create();
+
+        Sanctum::actingAs($certificate->patient);
+        $this->getJson("/api/visits/{$certificate->visit_record_id}")
+            ->assertOk()
+            ->assertJsonPath('certificate.certificate_no', $certificate->certificate_no)
+            ->assertJsonMissingPath('certificate.download_url');
+
+        // Staff, who print it, do get the link.
+        Sanctum::actingAs(User::factory()->admin()->create());
+        $this->getJson("/api/visits/{$certificate->visit_record_id}")
+            ->assertJsonPath('certificate.download_url', "/visits/{$certificate->visit_record_id}/certificate/download");
     }
 
     public function test_downloads_are_audited(): void
     {
         $certificate = MedicalCertificate::factory()->create();
         Storage::put($certificate->file_path, '%PDF-fake');
+        $nurse = User::factory()->nurse()->create();
 
-        Sanctum::actingAs($certificate->patient);
+        Sanctum::actingAs($nurse);
         $this->get("/api/visits/{$certificate->visit_record_id}/certificate/download")->assertOk();
 
         $this->assertDatabaseHas('audit_logs', [
             'action' => 'certificate.downloaded',
-            'user_id' => $certificate->patient_id,
+            'user_id' => $nurse->id,
             'model_type' => 'MedicalCertificate',
             'model_id' => $certificate->id,
         ]);
@@ -145,14 +173,14 @@ class MedicalCertificateTest extends TestCase
 
     public function test_visit_payload_embeds_the_certificate_once_issued(): void
     {
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
         $visit = VisitRecord::factory()->create();
 
-        $this->getJson("/api/visits/{$visit->queue_entry_id}")->assertOk()->assertJsonPath('certificate', null);
+        $this->getJson("/api/visits/{$visit->id}")->assertOk()->assertJsonPath('certificate', null);
 
         $this->postJson("/api/visits/{$visit->id}/certificate")->assertCreated();
 
-        $this->getJson("/api/visits/{$visit->queue_entry_id}")
+        $this->getJson("/api/visits/{$visit->id}")
             ->assertOk()
             ->assertJsonPath('certificate.certificate_no', 'MC-'.now()->year.'-0001')
             ->assertJsonPath('certificate.download_url', "/visits/{$visit->id}/certificate/download");
@@ -160,7 +188,7 @@ class MedicalCertificateTest extends TestCase
 
     public function test_certificate_is_not_issued_without_a_visit(): void
     {
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $this->postJson('/api/visits/999/certificate')->assertNotFound();
     }

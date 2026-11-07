@@ -22,8 +22,9 @@ class TrainMlModels extends Command
 {
     /**
      * Ridge penalties tried against the holdout. Zero is included so the
-     * sweep can report that no regularization was needed rather than
-     * assuming it was.
+     * sweep can show what the penalty buys: with collinear features the
+     * unpenalised fit has no unique solution and is skipped, and otherwise
+     * chooseLambda() keeps it only when every penalty does measurably worse.
      *
      * @var array<int, float>
      */
@@ -31,6 +32,13 @@ class TrainMlModels extends Command
 
     /** Fewer rows than this and there is nothing worth fitting. */
     private const MIN_DATASET_ROWS = 40;
+
+    /**
+     * How many standard errors of the row-by-row difference a model must beat
+     * the heuristic by before it replaces it: two, the usual bar for "not
+     * just chance" (about 95%).
+     */
+    private const CLEAR_WIN_STANDARD_ERRORS = 2.0;
 
     public function handle(): int
     {
@@ -92,7 +100,11 @@ class TrainMlModels extends Command
             return self::FAILURE;
         }
 
-        $best = $sweep[0];
+        $standardError = ModelEvaluator::maeStandardError(
+            $split['holdout_targets'],
+            $this->predictAll($sweep[0]['model'], $split['holdout_samples']),
+        );
+        $best = self::chooseLambda($sweep, $standardError);
         $holdoutFit = $best['model'];
         $holdoutPredictions = $this->predictAll($holdoutFit, $split['holdout_samples']);
         $metrics = ModelEvaluator::metrics($split['holdout_targets'], $holdoutPredictions);
@@ -102,14 +114,15 @@ class TrainMlModels extends Command
             ? WaitTimeFeatures::baselinePredictions($split['holdout_samples'])
             : VolumeFeatures::baselinePredictions($split['holdout_dates']);
         $baselineMetrics = ModelEvaluator::metrics($split['holdout_targets'], $baseline);
+        $comparison = ModelEvaluator::maeDifference($split['holdout_targets'], $holdoutPredictions, $baseline);
 
         $coverage = $this->intervalCoverage($split['holdout_targets'], $holdoutPredictions, $residualStd);
 
         /** Refit on every row so the served model uses all available history. */
         $final = RidgeRegression::fit($dataset['samples'], $dataset['targets'], $best['lambda'], $dataset['feature_names']);
 
-        $this->reportSweep($sweep);
-        $this->reportMetrics($metrics, $baselineMetrics, $coverage, $rows, count($split['holdout_samples']));
+        $this->reportSweep($sweep, $best, $standardError);
+        $this->reportMetrics($metrics, $baselineMetrics, $comparison, $coverage, $rows, count($split['holdout_samples']));
         $this->reportImportances($final);
 
         if ($this->option('dry-run')) {
@@ -118,7 +131,7 @@ class TrainMlModels extends Command
             return self::SUCCESS;
         }
 
-        $this->store($key, $final, $metrics, $baselineMetrics, $coverage, $residualStd, $sweep, $rows, count($split['holdout_samples']));
+        $this->store($key, $final, $metrics, $baselineMetrics, $comparison, $coverage, $residualStd, $sweep, $standardError, $rows, count($split['holdout_samples']));
 
         return self::SUCCESS;
     }
@@ -190,24 +203,60 @@ class TrainMlModels extends Command
     }
 
     /**
-     * @param  array<int, array{lambda: float, mae: float, model: TrainedModel}>  $sweep
+     * The one-standard-error rule (Hastie, Tibshirani & Friedman, The
+     * Elements of Statistical Learning, section 7.10): of the penalties
+     * whose holdout MAE is within one standard error of the best, use the
+     * strongest. They all did equally well on days the model never saw, and
+     * the stronger penalty keeps the coefficients steadier, so the choice is
+     * never decided by noise in the third decimal place.
+     *
+     * @param  array<int, array{lambda: float, mae: float, model: TrainedModel}>  $sweep  best MAE first
+     * @return array{lambda: float, mae: float, model: TrainedModel}
      */
-    private function reportSweep(array $sweep): void
+    public static function chooseLambda(array $sweep, ?float $standardError): array
+    {
+        $threshold = $sweep[0]['mae'] + ($standardError ?? 0.0);
+
+        $withinOneError = array_values(array_filter(
+            $sweep,
+            static fn (array $row): bool => $row['mae'] <= $threshold,
+        ));
+
+        usort($withinOneError, static fn (array $a, array $b): int => $b['lambda'] <=> $a['lambda']);
+
+        return $withinOneError[0];
+    }
+
+    /**
+     * @param  array<int, array{lambda: float, mae: float, model: TrainedModel}>  $sweep
+     * @param  array{lambda: float, mae: float, model: TrainedModel}  $chosen
+     */
+    private function reportSweep(array $sweep, array $chosen, ?float $standardError): void
     {
         $this->table(
-            ['lambda', 'holdout MAE'],
+            ['lambda', 'holdout MAE', ''],
             array_map(
-                static fn (array $row): array => [$row['lambda'], number_format($row['mae'], 3)],
+                static fn (array $row): array => [
+                    $row['lambda'],
+                    number_format($row['mae'], 3),
+                    $row['lambda'] === $chosen['lambda'] ? 'chosen' : '',
+                ],
                 $sweep,
             ),
         );
+
+        if ($standardError !== null) {
+            $this->line('  Chosen by the one-standard-error rule: the strongest penalty whose holdout MAE is within '
+                .number_format($standardError, 3).' of the best.');
+        }
     }
 
     /**
      * @param  array<string, float|int|null>  $metrics
      * @param  array<string, float|int|null>  $baseline
+     * @param  array{difference: float, standard_error: float|null}  $comparison
      */
-    private function reportMetrics(array $metrics, array $baseline, ?float $coverage, int $rows, int $holdoutRows): void
+    private function reportMetrics(array $metrics, array $baseline, array $comparison, ?float $coverage, int $rows, int $holdoutRows): void
     {
         $improvement = $this->improvementPercent($metrics['mae'], $baseline['mae']);
 
@@ -228,6 +277,14 @@ class TrainMlModels extends Command
         $improvement >= 0
             ? $this->info("  MAE is {$improvement}% better than the heuristic baseline.")
             : $this->warn('  MAE is '.abs($improvement).'% WORSE than the heuristic baseline.');
+
+        if ($comparison['standard_error'] !== null) {
+            $this->line(sprintf(
+                '  Edge over the heuristic, row by row: %.3f ± %.3f (one standard error).',
+                $comparison['difference'],
+                $comparison['standard_error'],
+            ));
+        }
     }
 
     private function reportImportances(TrainedModel $model): void
@@ -240,16 +297,22 @@ class TrainMlModels extends Command
     }
 
     /**
-     * Store the new version, and promote it only if it is at least as
-     * accurate on the holdout as the model currently serving.
+     * Store the new version, and promote it only if it clearly beats the
+     * heuristic on the holdout AND is at least as accurate as the model
+     * currently serving.
      *
      * A weekly retrain on a thin or unusual window can easily fit worse than
      * what is already deployed. Storing every version but gating promotion
      * on measured holdout MAE means a bad training run costs nothing, and
      * the reason it was rejected is printed rather than silently swallowed.
      *
+     * The heuristic bar matters as much: a model that cannot beat the simple
+     * formula on days it never saw has no business replacing it, so the
+     * formula keeps serving and the screens say so.
+     *
      * @param  array<string, float|int|null>  $metrics
      * @param  array<string, float|int|null>  $baselineMetrics
+     * @param  array{difference: float, standard_error: float|null}  $comparison
      * @param  array<int, array{lambda: float, mae: float, model: TrainedModel}>  $sweep
      */
     private function store(
@@ -257,19 +320,33 @@ class TrainMlModels extends Command
         TrainedModel $model,
         array $metrics,
         array $baselineMetrics,
+        array $comparison,
         ?float $coverage,
         float $residualStd,
         array $sweep,
+        ?float $standardError,
         int $rows,
         int $holdoutRows,
     ): void {
         $active = MlModel::active($key);
+
+        // A version fitted on an older feature list is not a fair rival (its
+        // MAE was measured on different inputs) and can no longer serve, so
+        // the new version is judged against the heuristic alone.
+        if ($active && $active->feature_names !== $model->featureNames) {
+            $this->line("  Version {$active->version} was fitted on an older feature list; replacing it.");
+            $active = null;
+        }
+
         $activeMae = $active?->metrics['mae'] ?? null;
         $newMae = $metrics['mae'];
+        $baselineMae = $baselineMetrics['mae'];
 
-        $promote = $activeMae === null || ($newMae !== null && $newMae <= $activeMae);
+        $differenceSe = $comparison['standard_error'];
+        $beatsBaseline = self::shouldPromote($newMae, $baselineMae, null, $differenceSe);
+        $promote = self::shouldPromote($newMae, $baselineMae, $activeMae, $differenceSe);
 
-        DB::transaction(function () use ($key, $model, $metrics, $baselineMetrics, $coverage, $residualStd, $sweep, $rows, $holdoutRows, $promote): void {
+        DB::transaction(function () use ($key, $model, $metrics, $baselineMetrics, $comparison, $coverage, $residualStd, $sweep, $standardError, $rows, $holdoutRows, $promote): void {
             $version = (int) MlModel::where('key', $key)->max('version') + 1;
 
             if ($promote) {
@@ -299,6 +376,9 @@ class TrainMlModels extends Command
                         static fn (array $row): array => ['lambda' => $row['lambda'], 'mae' => round($row['mae'], 3)],
                         $sweep,
                     ),
+                    'mae_standard_error' => $standardError === null ? null : round($standardError, 3),
+                    'baseline_difference' => round($comparison['difference'], 3),
+                    'baseline_difference_se' => $comparison['standard_error'] === null ? null : round($comparison['standard_error'], 3),
                 ]),
                 'residual_std' => $residualStd,
                 'is_active' => $promote,
@@ -311,9 +391,36 @@ class TrainMlModels extends Command
         WaitTimePredictor::forgetCachedModel();
         VolumePredictor::forgetCachedModel();
 
-        $promote
-            ? $this->info("  Activated: holdout MAE {$newMae}".($activeMae === null ? ' (first model for this key).' : " vs {$activeMae} previously."))
-            : $this->warn("  NOT activated: holdout MAE {$newMae} is worse than the active model's {$activeMae}. Keeping version {$active?->version}.");
+        match (true) {
+            $promote => $this->info("  Activated: holdout MAE {$newMae}".($activeMae === null ? ' (first model for this key).' : " vs {$activeMae} previously.")),
+            ! $beatsBaseline => $this->warn("  NOT activated: holdout MAE {$newMae} does not clearly beat the heuristic's {$baselineMae}"
+                .($differenceSe !== null ? sprintf(' (its edge must exceed %.1f × %.3f, the noise in the comparison)', self::CLEAR_WIN_STANDARD_ERRORS, $differenceSe) : '')
+                .'. '.($active ? "Keeping version {$active->version}." : 'The heuristic keeps serving.')),
+            default => $this->warn("  NOT activated: holdout MAE {$newMae} is worse than the active model's {$activeMae}. Keeping version {$active?->version}."),
+        };
+    }
+
+    /**
+     * A new version serves only if it clearly beats the heuristic on the
+     * holdout and is no worse than the version already serving.
+     *
+     * "Clearly" means by more than CLEAR_WIN_STANDARD_ERRORS standard errors
+     * of the row-by-row difference: on a month of held-out days a model can
+     * edge the formula by chance, and one that only ties it in truth should
+     * not take over the forecasts (or flip on and off from one retrain to
+     * the next).
+     */
+    public static function shouldPromote(?float $newMae, ?float $baselineMae, ?float $activeMae, ?float $differenceSe = null): bool
+    {
+        if ($newMae === null || $baselineMae === null || $newMae >= $baselineMae) {
+            return false;
+        }
+
+        if ($differenceSe !== null && $baselineMae - $newMae <= self::CLEAR_WIN_STANDARD_ERRORS * $differenceSe) {
+            return false;
+        }
+
+        return $activeMae === null || $newMae <= $activeMae;
     }
 
     /**

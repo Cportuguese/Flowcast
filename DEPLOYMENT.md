@@ -28,6 +28,10 @@ first production deploy, and again after any infrastructure change.
 | `REVERB_APP_SECRET`, `APP_KEY`, `DB_PASSWORD` | fresh values | Rotate anything that was ever used in development. `php artisan key:generate` for `APP_KEY`. |
 | `REVERB_SCHEME` | `https` | WebSockets over TLS. |
 | `SESSION_SECURE_COOKIE` | `true` | Only matters for `/up` and the CSRF cookie route, but set it. |
+| `MAIL_MAILER` | `smtp` | **Required for booking.** Every booking is confirmed with a 6-digit code sent to the patient's email. With `log` (the default) the code is only written to `storage/logs/laravel.log`, so no patient can finish a booking. |
+| `MAIL_HOST`, `MAIL_PORT` | `smtp.gmail.com`, `587` | Any SMTP provider works; these are Gmail's. |
+| `MAIL_USERNAME`, `MAIL_PASSWORD` | the clinic Gmail address, a Gmail **app password** | Gmail refuses the normal password over SMTP: turn on 2-Step Verification on that account, then create an app password (Google Account → Security → App passwords) and paste its 16 letters here. |
+| `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | the same Gmail address, `"UDD Health Services"` | What patients see as the sender of their booking code. |
 
 Rate limits are read at request time, so bumping them for a busy day
 (orientation, intramurals, field-trip medicals) is an `.env` edit plus
@@ -53,12 +57,26 @@ Never create admin/personnel users in tinker — `role` is not mass-assignable,
 so `User::create([... 'role' => 'admin'])` silently produces a *patient*.
 Use the command, which also writes an audit entry:
 
+UDD's clinic has three professionals. The head nurse is the **admin** (she
+runs the queue, reviews every booking and sees everything); the dentist and
+the school physician are **personnel** and only see their own bookings.
+`--profession` is what makes an account bookable from the phone:
+
 ```sh
-php artisan make:staff nurse@school.edu                       # personnel, random password printed
-php artisan make:staff head@school.edu --role=admin --name="Dr. Cruz"
+php artisan make:staff portia@udd.edu.ph --role=admin --profession=nurse --name="Portia"
+php artisan make:staff dentist@udd.edu.ph --profession=dentist --name="<Full name>"
+php artisan make:staff doctor@udd.edu.ph --profession=physician --name="<Full name>"   # a random password is printed for each
+php artisan db:seed --class=ClinicSetupSeeder --force    # UDD's hours: clinic Mon-Sat 8-6, dentist Tue/Thu 8-5, physician Fri 1-3
 ```
 
-Patients self-register from the mobile app.
+Each professional's bookable hours can then be changed in **Clinic Settings**.
+Patients self-register from the mobile app with their UDD Health Services
+record (name, birthdate, sex, address, department/course and ID number).
+
+The schools and courses patients choose from live in `api/config/udd.php`.
+Only the SITE, STE and SIHM short codes are confirmed from UDD's own pages —
+check the others with the registrar **before** real patients register,
+because each patient's code is stored on their record.
 
 ### Background processes (must be running)
 
@@ -70,10 +88,15 @@ Patients self-register from the mobile app.
 
 ### Outbound network
 
-Push notifications ("You're up!", "Almost your turn") are sent from the API
-to `https://exp.host`, so the server needs outbound HTTPS to it. Without it
-the pushes are skipped and logged as warnings; queue actions still succeed
-and patients still see every change on their queue screen.
+Push notifications ("You're up!", "Almost your turn", "Booking confirmed")
+are sent from the API to `https://exp.host`, so the server needs outbound
+HTTPS to it. Without it the pushes are skipped and logged as warnings; queue
+and booking actions still succeed and patients still see every change on
+their screens.
+
+Booking codes go out over SMTP (`MAIL_HOST:MAIL_PORT`, e.g.
+`smtp.gmail.com:587`). If the server cannot reach it, the patient is told the
+code could not be sent and can try again; nothing is booked without a code.
 
 ### Files
 
@@ -160,7 +183,7 @@ server-side revocation on logout, and audit logging of every login.
 
 **Mobile offline cache holds the patient's own visit summaries.** The
 patient app keeps a last-known copy of the signed-in patient's queue entry,
-appointments and visit list (date, complaint, diagnosis) in the app's
+appointments and visit list (date, complaint, intervention) in the app's
 private storage, so the three main screens still render in the clinic
 waiting room where there is no signal. It is unencrypted but sandboxed to
 the app, only ever contains the signed-in patient's own records, is used
@@ -180,7 +203,7 @@ A server-side kick would need Reverb internals; accepted for now.
 ```sh
 # API
 cd api && php artisan test            # must be green
-php artisan route:list                # every api/* route shows auth:sanctum + role:, except login/register/queue-board
+php artisan route:list                # every api/* route shows auth:sanctum + role:, except login/register/queue-board/departments
 curl -i https://<api-domain>/api/user # expect 401, JSON body, no stack trace
 
 # Web
@@ -199,4 +222,10 @@ curl -s https://<web-domain>/ | grep -o 'connect-src[^;]*'   # must list the pro
   certificate issue + download.
 - Inventory stock-out is transactional, locked, never negative.
 - Clients tear down the WebSocket on logout and on any 401.
-- 258 automated tests, including a route × role access matrix that fails if any authenticated route lacks a row.
+- A patient's self-entered ID number is only a claim until the head nurse
+  checks it against their UDD ID card (lookup shows birthdate and email to
+  compare; a wrong account's claim can be released). Checked numbers can no
+  longer be changed from the app.
+- The live queue channel is the head nurse's only; CSV exports neutralise
+  spreadsheet formulas typed into the system.
+- 393 automated tests, including a route × role access matrix that fails if any authenticated route lacks a row.

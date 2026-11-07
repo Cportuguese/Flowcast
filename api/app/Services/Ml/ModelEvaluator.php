@@ -167,4 +167,82 @@ class ModelEvaluator
 
         return sqrt($variance / $count);
     }
+
+    /**
+     * How much lower one set of predictions' MAE is than another's on the
+     * same rows, and how precisely the holdout pins that down. Each row is
+     * compared with itself (|baseline error| - |model error|), so a hard day
+     * that both get wrong does not count as noise against the model.
+     *
+     * @param  array<int, float>  $actual
+     * @param  array<int, float>  $model
+     * @param  array<int, float>  $baseline
+     * @return array{difference: float, standard_error: float|null} difference > 0 means the model's error is lower
+     */
+    public static function maeDifference(array $actual, array $model, array $baseline): array
+    {
+        $actual = array_values($actual);
+        $model = array_values($model);
+        $baseline = array_values($baseline);
+        $count = min(count($actual), count($model), count($baseline));
+
+        if ($count === 0) {
+            return ['difference' => 0.0, 'standard_error' => null];
+        }
+
+        $differences = [];
+
+        for ($i = 0; $i < $count; $i++) {
+            $differences[] = abs($actual[$i] - $baseline[$i]) - abs($actual[$i] - $model[$i]);
+        }
+
+        $mean = array_sum($differences) / $count;
+
+        if ($count < 2) {
+            return ['difference' => $mean, 'standard_error' => null];
+        }
+
+        $variance = 0.0;
+
+        foreach ($differences as $difference) {
+            $variance += ($difference - $mean) ** 2;
+        }
+
+        return ['difference' => $mean, 'standard_error' => sqrt($variance / ($count - 1)) / sqrt($count)];
+    }
+
+    /**
+     * How precisely a holdout pins down an MAE: the standard error of the
+     * mean absolute error (the sample standard deviation of |error| over
+     * √n). Two models whose MAEs differ by less than this did not really
+     * differ on the days held out.
+     *
+     * @param  array<int, float>  $actual
+     * @param  array<int, float>  $predicted
+     */
+    public static function maeStandardError(array $actual, array $predicted): ?float
+    {
+        $actual = array_values($actual);
+        $predicted = array_values($predicted);
+        $count = min(count($actual), count($predicted));
+
+        if ($count < 2) {
+            return null;
+        }
+
+        $errors = [];
+
+        for ($i = 0; $i < $count; $i++) {
+            $errors[] = abs($actual[$i] - $predicted[$i]);
+        }
+
+        $mean = array_sum($errors) / $count;
+        $variance = 0.0;
+
+        foreach ($errors as $error) {
+            $variance += ($error - $mean) ** 2;
+        }
+
+        return sqrt($variance / ($count - 1)) / sqrt($count);
+    }
 }

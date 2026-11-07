@@ -1,34 +1,73 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api, clearToken, getToken, onUnauthorized, setToken } from '../lib/api';
 import { clearCache, isNetworkError, readCache, writeCache } from '../lib/cache';
 import { disconnectEcho } from '../lib/echo';
 
 export type PatientType = 'student' | 'faculty' | 'staff';
 
-interface User {
+/** The UDD Health Services record, as the API stores it on the user. */
+export interface HealthRecord {
+  first_name: string | null;
+  middle_name: string | null;
+  last_name: string | null;
+  birthdate: string | null;
+  sex: 'male' | 'female' | null;
+  home_address: string | null;
+  patient_type: PatientType | null;
+  department: string | null;
+  course: string | null;
+  school_id: string | null;
+  contact_no: string | null;
+}
+
+export interface User extends HealthRecord {
   id: number;
   name: string;
   email: string;
+  /** Set once the nurse has checked the ID number against the patient's UDD ID card. */
+  school_id_verified_at?: string | null;
   role: 'admin' | 'personnel' | 'patient';
+  display_name: string;
+  job_title: string | null;
   [key: string]: unknown;
 }
+
+/** Everything sign-up sends: the account plus the health record. */
+export type RegisterParams = Record<string, unknown> & {
+  email: string;
+  password: string;
+  password_confirmation: string;
+};
 
 interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (params: {
-    name: string;
-    email: string;
-    password: string;
-    password_confirmation: string;
-    patient_type?: PatientType;
-    contact_no?: string;
-  }) => Promise<void>;
+  register: (params: RegisterParams) => Promise<void>;
   logout: () => Promise<void>;
+  /** Replace the signed-in user after the health record was edited. */
+  updateUser: (user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+/**
+ * Whether the record has everything booking needs (mirrors the API's
+ * User::hasCompleteHealthRecord, so the phone can ask before it is refused).
+ */
+export function hasCompleteHealthRecord(user: HealthRecord | null) {
+  if (!user) return false;
+  return Boolean(
+    user.first_name &&
+      user.last_name &&
+      user.birthdate &&
+      user.sex &&
+      user.home_address &&
+      user.department &&
+      user.school_id &&
+      (user.patient_type !== 'student' || user.course),
+  );
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -85,14 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void writeCache('user', response.data.user);
   }
 
-  async function register(params: {
-    name: string;
-    email: string;
-    password: string;
-    password_confirmation: string;
-    patient_type?: PatientType;
-    contact_no?: string;
-  }) {
+  async function register(params: RegisterParams) {
     const response = await api.post<{ user: User; token: string }>('/register', {
       ...params,
       device: 'mobile',
@@ -114,8 +146,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Stable across renders: screens call it from effects (the health record
+  // refreshes the account when it opens), and a new function every render
+  // would re-run those effects in a loop.
+  const updateUser = useCallback((next: User) => {
+    setUser(next);
+    void writeCache('user', next);
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

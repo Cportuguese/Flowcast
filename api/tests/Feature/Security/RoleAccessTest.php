@@ -50,6 +50,7 @@ class RoleAccessTest extends TestCase
             'user' => ['GET', '/api/user', self::ALL],
             'push-token' => ['PATCH', '/api/user/push-token', self::ALL],
             'password' => ['PATCH', '/api/user/password', self::ALL],
+            'profile update' => ['PATCH', '/api/user/profile', ['patient']],
 
             // Phase 2 — schedules & appointments
             'schedules index' => ['GET', '/api/admin/schedules', ['admin']],
@@ -57,39 +58,48 @@ class RoleAccessTest extends TestCase
             'event-days index' => ['GET', '/api/admin/event-days', ['admin']],
             'event-days store' => ['POST', '/api/admin/event-days', ['admin']],
             'event-days destroy' => ['DELETE', '/api/admin/event-days/{eventDay}', ['admin']],
-            'schedule active' => ['GET', '/api/schedule', self::ALL],
+            'providers admin index' => ['GET', '/api/admin/providers', ['admin']],
+            'provider schedule store' => ['POST', '/api/admin/providers/{user}/schedules', ['admin']],
+            'patient id verify' => ['PATCH', '/api/admin/patients/{user}/verify-id', ['admin']],
+            'patient id release' => ['PATCH', '/api/admin/patients/{user}/release-id', ['admin']],
+            'providers' => ['GET', '/api/providers', self::ALL],
+            'booking calendar' => ['GET', '/api/appointments/calendar', self::ALL],
             'available slots' => ['GET', '/api/appointments/available-slots', self::ALL],
+            'appointments otp' => ['POST', '/api/appointments/otp', ['patient']],
             'appointments store' => ['POST', '/api/appointments', ['patient']],
             'appointments mine' => ['GET', '/api/appointments/mine', ['patient']],
             'appointments cancel' => ['POST', '/api/appointments/{appointment}/cancel', ['patient']],
-            'appointments for date' => ['GET', '/api/appointments', self::STAFF],
+            'appointments index' => ['GET', '/api/appointments', self::STAFF],
             'appointments no-show' => ['PATCH', '/api/appointments/{appointment}/no-show', self::STAFF],
+            'appointments approve' => ['PATCH', '/api/appointments/{appointment}/approve', ['admin']],
+            'appointments decline' => ['PATCH', '/api/appointments/{appointment}/decline', ['admin']],
 
-            // Phase 3 — queue
-            'queue check-in' => ['POST', '/api/queue/check-in', self::ALL],
+            // Phase 3 — queue (the head nurse's)
+            'queue check-in' => ['POST', '/api/queue/check-in', ['admin', 'patient']],
             'queue mine' => ['GET', '/api/queue/mine', ['patient']],
-            'queue today' => ['GET', '/api/queue/today', self::STAFF],
-            'queue call-next' => ['POST', '/api/admin/queue/call-next', self::STAFF],
-            'queue walk-in' => ['POST', '/api/admin/queue/walk-in', self::STAFF],
-            'queue complete' => ['PATCH', '/api/admin/queue/{queueEntry}/complete', self::STAFF],
-            'queue skip' => ['PATCH', '/api/admin/queue/{queueEntry}/skip', self::STAFF],
+            'queue today' => ['GET', '/api/queue/today', ['admin']],
+            'queue call-next' => ['POST', '/api/admin/queue/call-next', ['admin']],
+            'queue walk-in' => ['POST', '/api/admin/queue/walk-in', ['admin']],
+            'queue lookup' => ['GET', '/api/admin/queue/lookup', ['admin']],
+            'queue complete' => ['PATCH', '/api/admin/queue/{queueEntry}/complete', ['admin']],
+            'queue skip' => ['PATCH', '/api/admin/queue/{queueEntry}/skip', ['admin']],
             'queue history' => ['GET', '/api/queue/{date}/history', ['admin']],
 
             // Phase 4 — visits
             'visits store' => ['POST', '/api/visits', self::STAFF],
             'visits search' => ['GET', '/api/admin/visits/search', self::STAFF],
             'visits mine' => ['GET', '/api/visits/mine', ['patient']],
-            'visits show' => ['GET', '/api/visits/{queueEntry}', self::ALL],
-            'certificate issue' => ['POST', '/api/visits/{visit}/certificate', ['personnel']],
-            'certificate show' => ['GET', '/api/visits/{visit}/certificate', self::ALL],
-            'certificate download' => ['GET', '/api/visits/{visit}/certificate/download', self::ALL],
+            'visits show' => ['GET', '/api/visits/{visit}', self::ALL],
+            'certificate issue' => ['POST', '/api/visits/{visit}/certificate', self::STAFF],
+            'certificate show' => ['GET', '/api/visits/{visit}/certificate', self::STAFF],
+            'certificate download' => ['GET', '/api/visits/{visit}/certificate/download', self::STAFF],
 
-            // Phase 5 — analytics
-            'analytics dashboard' => ['GET', '/api/analytics/dashboard', self::STAFF],
-            'analytics volume-forecast' => ['GET', '/api/analytics/volume-forecast', self::STAFF],
-            'analytics wait-time-forecast' => ['GET', '/api/analytics/wait-time-forecast', self::STAFF],
-            'analytics peak-hours' => ['GET', '/api/analytics/peak-hours', self::STAFF],
-            'analytics staffing-what-if' => ['GET', '/api/analytics/staffing-what-if', self::STAFF],
+            // Phase 5 — analytics (the head nurse's)
+            'analytics dashboard' => ['GET', '/api/analytics/dashboard', ['admin']],
+            'analytics volume-forecast' => ['GET', '/api/analytics/volume-forecast', ['admin']],
+            'analytics wait-time-forecast' => ['GET', '/api/analytics/wait-time-forecast', ['admin']],
+            'analytics peak-hours' => ['GET', '/api/analytics/peak-hours', ['admin']],
+            'analytics breakdown' => ['GET', '/api/analytics/breakdown', ['admin']],
             'analytics model-performance' => ['GET', '/api/analytics/model-performance', ['admin']],
             'audit-logs index' => ['GET', '/api/admin/audit-logs', ['admin']],
             'reports queue-summary' => ['GET', '/api/admin/reports/queue-summary', ['admin']],
@@ -97,14 +107,15 @@ class RoleAccessTest extends TestCase
             'reports no-show-summary' => ['GET', '/api/admin/reports/no-show-summary', ['admin']],
             'reports peak-hours-by-weekday' => ['GET', '/api/admin/reports/peak-hours-by-weekday', ['admin']],
 
-            // Phase 6 — inventory
+            // Phase 6 — inventory (the stock is the head nurse's; the dentist
+            // and physician only read the list to dispense in a visit)
             'medicines index' => ['GET', '/api/medicines', self::STAFF],
             'medicines store' => ['POST', '/api/admin/medicines', ['admin']],
             'medicines update' => ['PATCH', '/api/admin/medicines/{medicine}', ['admin']],
-            'inventory stock-in' => ['POST', '/api/inventory/stock-in', self::STAFF],
-            'inventory stock-out' => ['POST', '/api/inventory/stock-out', self::STAFF],
-            'inventory low-stock' => ['GET', '/api/inventory/low-stock', self::STAFF],
-            'inventory expiring-soon' => ['GET', '/api/inventory/expiring-soon', self::STAFF],
+            'inventory stock-in' => ['POST', '/api/inventory/stock-in', ['admin']],
+            'inventory stock-out' => ['POST', '/api/inventory/stock-out', ['admin']],
+            'inventory low-stock' => ['GET', '/api/inventory/low-stock', ['admin']],
+            'inventory expiring-soon' => ['GET', '/api/inventory/expiring-soon', ['admin']],
             'inventory expired' => ['GET', '/api/admin/inventory/expired', ['admin']],
             'inventory dispose' => ['POST', '/api/admin/inventory/batches/{batch}/dispose', ['admin']],
             'inventory history' => ['GET', '/api/admin/inventory/history', ['admin']],
@@ -202,14 +213,26 @@ class RoleAccessTest extends TestCase
             return str_replace('{batch}', (string) MedicineBatch::factory()->expired()->create()->id, $uri);
         }
 
+        if (str_contains($uri, '/patients/{user}')) {
+            return str_replace('{user}', (string) User::factory()->patient()->create()->id, $uri);
+        }
+
+        if (str_contains($uri, '{user}')) {
+            return str_replace('{user}', (string) User::factory()->dentist()->create()->id, $uri);
+        }
+
+        // The dentist and physician act only on their own bookings and
+        // records, so a personnel actor gets rows that are theirs.
+        $ownerId = $actor && $actor->role !== 'patient' ? $actor->id : User::factory()->admin()->create()->id;
+
         if (str_contains($uri, '{appointment}')) {
-            $id = Appointment::factory()->for($patient, 'patient')->create()->id;
+            $id = Appointment::factory()->for($patient, 'patient')->create(['provider_id' => $actor?->role === 'personnel' ? $actor->id : null])->id;
 
             return str_replace('{appointment}', (string) $id, $uri);
         }
 
         $entry = QueueEntry::factory()->for($patient, 'patient')->create();
-        $visit = VisitRecord::factory()->for($entry, 'queueEntry')->create(['patient_id' => $patient->id]);
+        $visit = VisitRecord::factory()->for($entry, 'queueEntry')->create(['patient_id' => $patient->id, 'created_by_id' => $ownerId]);
 
         if (str_contains($uri, '{visit}')) {
             return str_replace('{visit}', (string) $visit->id, $uri);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import {
   Area,
   Bar,
@@ -6,6 +6,7 @@ import {
   CartesianGrid,
   Cell,
   ComposedChart,
+  LabelList,
   Legend,
   Line,
   LineChart,
@@ -15,7 +16,9 @@ import {
   YAxis,
 } from 'recharts'
 import { api } from '../lib/api'
-import { formatShortDate } from '../lib/dates'
+import { downloadCsv } from '../lib/csv'
+import { formatShortDate, isoDaysFromToday, todayIso } from '../lib/dates'
+import { useDepartments } from '../lib/departments'
 import { extractErrorMessage } from '../lib/errors'
 import { PageHeader } from '../components/PageHeader'
 import { CHART_COLORS } from '../lib/theme'
@@ -113,14 +116,334 @@ interface ModelPerformance {
   }
 }
 
+interface BreakdownCounts {
+  visited: number
+  served: number
+  skipped: number
+  no_shows: number
+  bookings: number
+}
+
+interface Breakdown {
+  from: string
+  to: string
+  department: string | null
+  totals: BreakdownCounts
+  departments: Array<BreakdownCounts & { code: string; name: string; courses: Array<BreakdownCounts & { code: string | null; name: string }> }>
+  professionals: Array<{
+    id: number
+    display_name: string
+    job_title: string | null
+    profession: 'nurse' | 'dentist' | 'physician' | null
+    bookings: number
+    completed: number
+    no_shows: number
+    pending: number
+    visits_recorded: number
+    queue_served: number
+  }>
+}
+
+type Period = 'today' | '7' | '30' | 'custom'
+
+/** The dates a period covers, today inclusive. */
+function periodRange(period: Period, from: string, to: string) {
+  if (period === 'today') return { from: todayIso(), to: todayIso() }
+  if (period === 'custom') return { from, to }
+  return { from: isoDaysFromToday(1 - Number(period)), to: todayIso() }
+}
+
+/** Bars carry at most this many categories before the list is cut to the busiest. */
+const MAX_BREAKDOWN_BARS = 12
+
+/**
+ * Who came to the clinic, by department (or, with one department picked, by
+ * course): visited, served, skipped and missed bookings over a period, plus
+ * how each of the three professionals' bookings went. Descriptive counts —
+ * department is deliberately not a forecasting input.
+ */
+function DepartmentSection() {
+  const departments = useDepartments()
+  const [period, setPeriod] = useState<Period>('today')
+  const [from, setFrom] = useState(todayIso)
+  const [to, setTo] = useState(todayIso)
+  const [department, setDepartment] = useState('')
+  const [data, setData] = useState<Breakdown | null>(null)
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const range = periodRange(period, from, to)
+    if (!range.from || !range.to || range.from > range.to) return
+    // A reply for filters already changed again must not land over the newer one.
+    let stale = false
+    api
+      .get<Breakdown>('/analytics/breakdown', { params: { ...range, department: department || undefined } })
+      .then((response) => {
+        if (stale) return
+        setData(response.data)
+        setError(null)
+      })
+      .catch((err) => {
+        if (!stale) setError(extractErrorMessage(err, 'Unable to load the department breakdown.'))
+      })
+    return () => {
+      stale = true
+    }
+  }, [period, from, to, department])
+
+  // One department picked: show its courses; otherwise the departments.
+  const rows = data
+    ? department
+      ? (data.departments[0]?.courses ?? []).map((course) => ({ ...course, label: course.code ?? 'Faculty/staff' }))
+      : data.departments.map((dept) => ({ ...dept, label: dept.code }))
+    : []
+  const chartRows = rows.filter((row) => row.visited > 0).slice(0, MAX_BREAKDOWN_BARS)
+
+  function handleCsv() {
+    if (!data) return
+    const header = ['Department', 'Course', 'Visited', 'Served', 'Skipped', 'No-shows', 'Bookings']
+    const lines = data.departments.flatMap((dept) => [
+      [dept.code, '', dept.visited, dept.served, dept.skipped, dept.no_shows, dept.bookings],
+      ...dept.courses.map((course) => [dept.code, course.code ?? 'Faculty/staff', course.visited, course.served, course.skipped, course.no_shows, course.bookings]),
+    ])
+    downloadCsv(`departments-${data.from}-to-${data.to}.csv`, [header, ...lines])
+  }
+
+  const selectClass = 'rounded border border-slate-300 px-2 py-1.5 text-sm'
+
+  return (
+    <section className="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold text-slate-900">Who came, by {department ? 'course' : 'department'}</h2>
+        {data && (
+          <button type="button" onClick={handleCsv} className="text-xs font-medium text-blue-600 hover:underline">
+            Download CSV
+          </button>
+        )}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <label htmlFor="breakdown-period" className="sr-only">Period</label>
+        <select id="breakdown-period" value={period} onChange={(e) => setPeriod(e.target.value as Period)} className={selectClass}>
+          <option value="today">Today</option>
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="custom">Custom range</option>
+        </select>
+        {period === 'custom' && (
+          <>
+            <label htmlFor="breakdown-from" className="sr-only">From</label>
+            <input id="breakdown-from" type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className={selectClass} />
+            <span className="text-sm text-slate-400">to</span>
+            <label htmlFor="breakdown-to" className="sr-only">To</label>
+            <input id="breakdown-to" type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className={selectClass} />
+          </>
+        )}
+        <label htmlFor="breakdown-department" className="sr-only">Department</label>
+        <select
+          id="breakdown-department"
+          value={department}
+          onChange={(e) => {
+            setDepartment(e.target.value)
+            setExpanded(null)
+          }}
+          className={selectClass}
+        >
+          <option value="">All departments</option>
+          {departments.map((dept) => (
+            <option key={dept.code} value={dept.code}>
+              {dept.code} — {dept.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
+
+      {data && (
+        <>
+          <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <StatTile label="Visited" value={data.totals.visited} hint="came to the clinic" />
+            <StatTile label="Served" value={data.totals.served} />
+            <StatTile label="Skipped" value={data.totals.skipped} hint="not there when called" />
+            <StatTile label="No-shows" value={data.totals.no_shows} hint="missed bookings" />
+          </div>
+
+          {chartRows.length === 0 ? (
+            <p className="mt-4 text-sm text-slate-400">Nobody came in this period.</p>
+          ) : (
+            <div className="mt-4" style={{ height: chartRows.length * 30 + 24 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartRows} layout="vertical" margin={{ top: 0, right: 36, left: 4, bottom: 0 }}>
+                  <CartesianGrid stroke={COLOR_GRID} horizontal={false} />
+                  <XAxis type="number" allowDecimals={false} tick={{ fill: COLOR_MUTED, fontSize: 11 }} />
+                  <YAxis type="category" dataKey="label" width={64} tick={{ fill: COLOR_MUTED, fontSize: 12 }} tickLine={false} />
+                  <Tooltip
+                    cursor={{ fill: COLOR_GRID, fillOpacity: 0.3 }}
+                    contentStyle={{ fontSize: 12, borderRadius: 8, borderColor: COLOR_GRID }}
+                    formatter={(value, name) => [value, name]}
+                    labelFormatter={(label) => rows.find((row) => row.label === label)?.name ?? String(label)}
+                  />
+                  <Bar dataKey="visited" name="Visited" fill={COLOR_ACTUAL} radius={[0, 4, 4, 0]} barSize={16} isAnimationActive={false}>
+                    <LabelList dataKey="visited" position="right" style={{ fill: '#475569', fontSize: 11 }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[560px] text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="px-3 py-2">{department ? 'Course' : 'Department'}</th>
+                  <th className="px-3 py-2 text-right">Visited</th>
+                  <th className="px-3 py-2 text-right">Served</th>
+                  <th className="px-3 py-2 text-right">Skipped</th>
+                  <th className="px-3 py-2 text-right">No-shows</th>
+                  <th className="px-3 py-2 text-right">Bookings</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 tabular-nums">
+                {department
+                  ? rows.map((row) => <BreakdownRow key={row.label} label={row.label} name={row.name} counts={row} />)
+                  : data.departments.map((dept) => (
+                      <Fragment key={dept.code}>
+                        <BreakdownRow
+                          label={dept.code}
+                          name={dept.name}
+                          counts={dept}
+                          expandable={dept.courses.length > 0}
+                          isExpanded={expanded === dept.code}
+                          onToggle={() => setExpanded(expanded === dept.code ? null : dept.code)}
+                        />
+                        {expanded === dept.code &&
+                          dept.courses.map((course) => (
+                            <BreakdownRow key={`${dept.code}-${course.code}`} label={course.code ?? 'Faculty/staff'} name={course.name} counts={course} indent />
+                          ))}
+                      </Fragment>
+                    ))}
+              </tbody>
+            </table>
+          </div>
+
+          <h3 className="mt-6 text-xs font-semibold uppercase text-slate-500">The clinic's professionals</h3>
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full min-w-[560px] text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="px-3 py-2">Professional</th>
+                  <th className="px-3 py-2 text-right">Bookings</th>
+                  <th className="px-3 py-2 text-right">Completed</th>
+                  <th className="px-3 py-2 text-right">No-shows</th>
+                  <th className="px-3 py-2 text-right">Under review</th>
+                  <th className="px-3 py-2 text-right">Visits recorded</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 tabular-nums">
+                {data.professionals.map((pro) => (
+                  <tr key={pro.id}>
+                    <td className="px-3 py-2">
+                      <div className="font-medium text-slate-900">{pro.display_name}</div>
+                      <div className="text-xs text-slate-500">
+                        {pro.job_title}
+                        {pro.profession === 'nurse' && ` · ${pro.queue_served} served from the queue`}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-right">{pro.bookings}</td>
+                    <td className="px-3 py-2 text-right">{pro.completed}</td>
+                    <td className="px-3 py-2 text-right">{pro.no_shows}</td>
+                    <td className="px-3 py-2 text-right">{pro.pending}</td>
+                    <td className="px-3 py-2 text-right">{pro.visits_recorded}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
+  )
+}
+
+function BreakdownRow({
+  label,
+  name,
+  counts,
+  indent = false,
+  expandable = false,
+  isExpanded = false,
+  onToggle,
+}: {
+  label: string
+  name: string
+  counts: BreakdownCounts
+  indent?: boolean
+  expandable?: boolean
+  isExpanded?: boolean
+  onToggle?: () => void
+}) {
+  return (
+    <tr className={indent ? 'bg-slate-50/60' : undefined}>
+      <td className={`px-3 py-2 ${indent ? 'pl-8' : ''}`}>
+        {expandable ? (
+          <button type="button" onClick={onToggle} aria-expanded={isExpanded} className="text-left hover:underline">
+            <span className="font-medium text-slate-900">{isExpanded ? '▾' : '▸'} {label}</span>
+            <span className="ml-2 text-xs text-slate-500">{name}</span>
+          </button>
+        ) : (
+          <>
+            <span className={indent ? 'text-slate-700' : 'font-medium text-slate-900'}>{label}</span>
+            <span className="ml-2 text-xs text-slate-500">{name}</span>
+          </>
+        )}
+      </td>
+      <td className="px-3 py-2 text-right">{counts.visited}</td>
+      <td className="px-3 py-2 text-right">{counts.served}</td>
+      <td className="px-3 py-2 text-right">{counts.skipped}</td>
+      <td className="px-3 py-2 text-right">{counts.no_shows}</td>
+      <td className="px-3 py-2 text-right">{counts.bookings}</td>
+    </tr>
+  )
+}
+
 function formatHour(hour: number): string {
   const period = hour < 12 ? 'AM' : 'PM'
   const displayHour = hour % 12 === 0 ? 12 : hour % 12
   return `${displayHour} ${period}`
 }
 
+/**
+ * The models' inputs in plain words. Weekdays are measured against Monday,
+ * the baseline day (Sunday never occurs: the clinic is closed).
+ */
+const FEATURE_LABELS: Record<string, string> = {
+  people_ahead: 'People ahead in line',
+  // The old heuristic's estimate, fed in as an input; it largely repeats
+  // "people ahead", so its own bar is a small correction to that one.
+  queue_minutes_ahead: 'Old formula (people × pace)',
+  in_consultation: 'Someone with the nurse',
+  bookings_due_next_hour: 'Bookings due next hour',
+  hour_sin: 'Time of day (sine)',
+  hour_cos: 'Time of day (cosine)',
+  minutes_since_open: 'Minutes since opening',
+  is_event_day: 'Event day',
+  is_appointment: 'Booked patient',
+  dow_2: 'Tuesday vs Monday',
+  dow_3: 'Wednesday vs Monday',
+  dow_4: 'Thursday vs Monday',
+  dow_5: 'Friday vs Monday',
+  dow_6: 'Saturday vs Monday',
+  lag_same_weekday_1: 'Same weekday last week',
+  lag_same_weekday_2: 'Same weekday 2 weeks ago',
+  roll7_mean: '7-day average',
+  roll28_mean: '28-day average',
+  trend_index: 'Long-term trend',
+}
+
 function formatFeatureName(feature: string): string {
-  return feature.replace(/_/g, ' ').replace(/\bdow (\d)\b/, (_, day) => `weekday ${day}`)
+  return FEATURE_LABELS[feature] ?? feature.replace(/_/g, ' ')
 }
 
 /**
@@ -129,7 +452,10 @@ function formatFeatureName(feature: string): string {
  * band — history has no uncertainty to show.
  */
 function buildVolumeChartData(series: VolumeForecast['series']) {
-  const rows = series.map((row) => ({
+  // Days the clinic is closed have no history row (nobody came), so their
+  // forecast zeros are left out too — otherwise the forecast line dives to
+  // zero every Sunday while the actual line simply skips it.
+  const rows = series.filter((row) => row.source !== 'closed').map((row) => ({
     date: row.date,
     actual: row.type === 'actual' ? (row.arrivals ?? null) : null,
     forecast: row.type === 'forecast' ? (row.predicted_arrivals ?? null) : null,
@@ -243,7 +569,7 @@ function ModelPerformanceSection({ performance }: { performance: ModelPerformanc
                 <YAxis
                   type="category"
                   dataKey="label"
-                  width={132}
+                  width={156}
                   tick={{ fill: COLOR_MUTED, fontSize: 11 }}
                   tickLine={false}
                 />
@@ -367,14 +693,22 @@ export function AnalyticsDashboard() {
               <StatTile label="Completed today" value={dashboard.stats.completed_today} />
             </div>
 
+            <DepartmentSection />
+
             <section className="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 className="text-sm font-semibold text-slate-900">Patient volume (past 4 weeks + 7-day forecast)</h2>
-                {volume?.model.is_trained && (
+                {volume?.model.is_trained ? (
                   <p className="text-xs text-slate-400">
                     model v{volume.model.version}
                     {volume.model.mae != null && ` · ±${volume.model.mae} arrivals typical error`}
                   </p>
+                ) : (
+                  volume && (
+                    <p className="text-xs text-slate-400">
+                      Forecast from the same-weekday average (a learned model is used only when it clearly beats this on held-out days)
+                    </p>
+                  )
                 )}
               </div>
               {volume && (
@@ -438,7 +772,8 @@ export function AnalyticsDashboard() {
                     </ResponsiveContainer>
                   </div>
                   <p className="mt-2 text-xs text-slate-400">
-                    The shaded band is where the day's total is expected to land 8 times out of 10.
+                    The shaded band is where the day's total is expected to land 8 times out of 10. Days the clinic is
+                    closed are left out.
                   </p>
                 </>
               )}
@@ -460,7 +795,7 @@ export function AnalyticsDashboard() {
                           <XAxis dataKey="hour" tickFormatter={formatHour} tick={{ fill: COLOR_MUTED, fontSize: 12 }} />
                           <YAxis tick={{ fill: COLOR_MUTED, fontSize: 12 }} allowDecimals={false} />
                           <Tooltip labelFormatter={(value) => formatHour(Number(value))} />
-                          <Bar dataKey="arrival_count" name="Arrivals" radius={[4, 4, 0, 0]}>
+                          <Bar dataKey="arrival_count" name="Arrivals" radius={[4, 4, 0, 0]} maxBarSize={40}>
                             {peakHours.hours.map((entry) => (
                               <Cell
                                 key={entry.hour}

@@ -1,0 +1,12 @@
+{
+  "name": "flowcast-brand",
+  "private": true,
+  "type": "module",
+  "description": "Builds every Flowcast logo file (web, mobile, PDF) from logo-mark.svg.",
+  "scripts": {
+    "build": "node build-assets.mjs"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "2.6.2"
+  }
+}

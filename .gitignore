@@ -42,5 +42,6 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
-# Claude Code local session state
-.claude/
+# Claude Code: project skills and shared settings are committed; personal
+# permissions are not.
+.claude/settings.local.json

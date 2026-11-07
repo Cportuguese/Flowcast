@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="3 0 64 64" width="64" height="64">
+  <title>Flowcast</title>
+  <!-- The official Flowcast mark: an F whose middle bar flows into a wave.
+       One 8-unit round stroke on a 64-unit grid. Every bend of the wave has a
+       radius above half the stroke width, so the edges never pinch or notch.
+       This file is the source of truth; run `npm run build` in brand/ after
+       editing it. -->
+  <g fill="none" stroke="#0b1636" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M19 51 V13 H45"/>
+    <!-- One sine period (x 19 to 51, amplitude 3.5): tightest bend radius ~7.4 -->
+    <path d="M19 33 C21.67 34.84 24.12 36.5 27 36.5 C29.88 36.5 32.33 34.84 35 33 C37.67 31.16 40.12 29.5 43 29.5 C45.88 29.5 48.33 31.16 51 33"/>
+  </g>
+</svg>

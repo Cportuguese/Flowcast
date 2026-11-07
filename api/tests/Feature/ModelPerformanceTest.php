@@ -101,34 +101,6 @@ class ModelPerformanceTest extends TestCase
             ->assertJsonPath('online.metrics.mae', 5);
     }
 
-    public function test_the_staffing_what_if_shows_the_wait_falling_as_staff_rise(): void
-    {
-        MlModel::factory()->active()->create();
-
-        Sanctum::actingAs(User::factory()->personnel()->create());
-
-        $response = $this->getJson('/api/analytics/staffing-what-if?people_ahead=10')->assertOk();
-        $scenarios = $response->json('scenarios');
-
-        $this->assertSame([1, 2, 3], array_column($scenarios, 'active_staff'));
-
-        foreach ($scenarios as $scenario) {
-            $this->assertLessThanOrEqual($scenario['estimated_wait_high'], $scenario['estimated_wait_minutes']);
-            $this->assertLessThanOrEqual($scenario['estimated_wait_minutes'], $scenario['estimated_wait_low']);
-        }
-
-        /** people_ahead_per_staff falls as staff rise, so the wait must too. */
-        $this->assertLessThan($scenarios[0]['estimated_wait_minutes'], $scenarios[1]['estimated_wait_minutes']);
-        $this->assertLessThan($scenarios[1]['estimated_wait_minutes'], $scenarios[2]['estimated_wait_minutes']);
-    }
-
-    public function test_the_staffing_what_if_is_closed_to_patients(): void
-    {
-        Sanctum::actingAs(User::factory()->patient()->create());
-
-        $this->getJson('/api/analytics/staffing-what-if')->assertForbidden();
-    }
-
     public function test_an_undertrained_model_is_not_served(): void
     {
         MlModel::factory()->undertrained()->create();

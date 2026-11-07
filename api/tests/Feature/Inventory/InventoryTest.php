@@ -17,7 +17,7 @@ class InventoryTest extends TestCase
     public function test_stock_in_creates_a_batch_and_log_and_raises_stock(): void
     {
         $medicine = Medicine::factory()->create();
-        $nurse = User::factory()->personnel()->create();
+        $nurse = User::factory()->nurse()->create();
         Sanctum::actingAs($nurse);
 
         $this->postJson('/api/inventory/stock-in', [
@@ -43,7 +43,7 @@ class InventoryTest extends TestCase
     {
         $archived = Medicine::factory()->archived()->create();
         $active = Medicine::factory()->create();
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $this->postJson('/api/inventory/stock-in', [
             'medicine_id' => $archived->id,
@@ -64,7 +64,7 @@ class InventoryTest extends TestCase
         // Created out of order on purpose: FIFO must sort by expiry, not by id.
         $later = MedicineBatch::factory()->for($medicine)->expiresIn(300)->create(['quantity_received' => 40]);
         $earlier = MedicineBatch::factory()->for($medicine)->expiresIn(30)->create(['quantity_received' => 25]);
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $this->postJson('/api/inventory/stock-out', [
             'medicine_id' => $medicine->id,
@@ -86,7 +86,7 @@ class InventoryTest extends TestCase
         $medicine = Medicine::factory()->create();
         MedicineBatch::factory()->for($medicine)->expired()->create(['quantity_received' => 100]);
         $usable = MedicineBatch::factory()->for($medicine)->create(['quantity_received' => 10]);
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $this->postJson('/api/inventory/stock-out', [
             'medicine_id' => $medicine->id,
@@ -104,7 +104,7 @@ class InventoryTest extends TestCase
         $fine = Medicine::factory()->create(['reorder_level' => 5]);
         MedicineBatch::factory()->for($fine)->create(['quantity_received' => 50]);
         $out = Medicine::factory()->create(['name' => 'Cetirizine']);
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $this->getJson('/api/inventory/low-stock')->assertOk()
             ->assertJsonCount(1)
@@ -126,7 +126,7 @@ class InventoryTest extends TestCase
         MedicineBatch::factory()->for($medicine)->expiresIn(60)->create();
         MedicineBatch::factory()->for($medicine)->expired()->create();
         MedicineBatch::factory()->for($medicine)->expiresIn(5)->create(['quantity_received' => 0]);
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $this->getJson('/api/inventory/expiring-soon')->assertOk()
             ->assertJsonPath('days', 30)

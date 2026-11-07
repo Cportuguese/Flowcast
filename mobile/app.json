@@ -14,7 +14,7 @@
     "android": {
       "package": "edu.udd.flowcast",
       "adaptiveIcon": {
-        "backgroundColor": "#ffffff",
+        "backgroundColor": "#0b1636",
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false

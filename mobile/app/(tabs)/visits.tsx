@@ -1,22 +1,21 @@
-import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Text } from '../../components/Text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { OfflineNotice } from '../../components/OfflineNotice';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { api } from '../../lib/api';
 import { fetchWithCache, isNetworkError } from '../../lib/cache';
+import { formatLongDate } from '../../lib/time';
 
 interface VisitSummary {
   id: number;
-  queue_entry_id: number;
   date: string;
   complaint: string;
-  diagnosis: string;
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  intervention: string;
+  seen_by: string;
+  seen_by_title: string | null;
 }
 
 export default function VisitHistory() {
@@ -39,9 +38,14 @@ export default function VisitHistory() {
     }
   }, []);
 
-  useEffect(() => {
-    load().finally(() => setIsLoading(false));
-  }, [load]);
+  // On every visit to the tab, not just the first: tabs stay mounted, so a
+  // visit recorded while the patient was elsewhere in the app would not
+  // show until they pulled to refresh.
+  useFocusEffect(
+    useCallback(() => {
+      load().finally(() => setIsLoading(false));
+    }, [load]),
+  );
 
   async function handleRefresh() {
     setIsRefreshing(true);
@@ -64,7 +68,7 @@ export default function VisitHistory() {
       refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
     >
       <View className="px-6">
-        <ScreenHeader title="Visits" subtitle="Your past clinic visit records" />
+        <ScreenHeader title="Visits" subtitle="Your UDD Health Services records" />
 
         {offline && <OfflineNotice since={offline.since} />}
 
@@ -75,12 +79,18 @@ export default function VisitHistory() {
         {visits.map((visit, index) => (
           <Pressable
             key={visit.id}
-            onPress={() => router.push(`/visit-detail?queueEntryId=${visit.queue_entry_id}`)}
+            onPress={() => router.push(`/visit-detail?visitId=${visit.id}`)}
             className={`rounded-xl border border-slate-200 bg-white p-4 ${index === 0 ? 'mt-6' : 'mt-3'}`}
           >
-            <Text className="text-sm font-semibold text-slate-900">{formatDate(visit.date)}</Text>
-            <Text className="mt-2 text-sm text-slate-600">{visit.complaint}</Text>
-            <Text className="mt-1 text-xs text-slate-400">{visit.diagnosis}</Text>
+            <Text className="text-sm font-semibold text-slate-900">{formatLongDate(visit.date)}</Text>
+            <Text className="mt-0.5 text-xs text-slate-500">
+              {visit.seen_by}
+              {visit.seen_by_title && visit.seen_by_title !== 'Head Nurse' ? ` · ${visit.seen_by_title}` : ''}
+            </Text>
+            <Text className="mt-2 text-sm text-slate-700">{visit.complaint}</Text>
+            <Text className="mt-1 text-xs text-slate-500" numberOfLines={2}>
+              {visit.intervention}
+            </Text>
           </Pressable>
         ))}
       </View>

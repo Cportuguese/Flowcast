@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Support\HealthRecord;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
@@ -24,26 +25,23 @@ class AuthController extends Controller
     ];
 
     /**
-     * Register a new patient account. Admin/personnel accounts are created
-     * separately via `php artisan make:staff`.
+     * Register a new patient account together with their UDD Health
+     * Services record. Admin/personnel accounts are created separately via
+     * `php artisan make:staff`.
      */
     public function register(Request $request)
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'confirmed', Password::defaults()],
-            'patient_type' => ['nullable', Rule::in(['student', 'faculty', 'staff'])],
-            'contact_no' => ['nullable', 'string', 'max:32'],
             'device' => ['nullable', Rule::in(array_keys(self::TOKEN_TTL_MINUTES))],
-        ]);
+            ...HealthRecord::rules($request->all()),
+        ], HealthRecord::MESSAGES, HealthRecord::ATTRIBUTE_NAMES);
 
         $user = new User([
-            'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
-            'patient_type' => $validated['patient_type'] ?? null,
-            'contact_no' => $validated['contact_no'] ?? null,
+            ...HealthRecord::attributes($validated),
         ]);
         // `role` is deliberately not mass-assignable; set it explicitly.
         $user->role = 'patient';
@@ -125,6 +123,48 @@ class AuthController extends Controller
     public function user(Request $request)
     {
         return response()->json($request->user());
+    }
+
+    /**
+     * A patient correcting or completing their own health record — from the
+     * phone's "My health record" screen, or the booking step that asks them
+     * to confirm it. The email doubles as the login and where booking codes
+     * go, so it can be changed here too.
+     */
+    public function updateProfile(Request $request)
+    {
+        $user = $request->user();
+
+        $rules = HealthRecord::rules($request->all(), $user);
+
+        // Once the nurse has checked it against the patient's UDD ID card,
+        // the ID number is the clinic's record: a patient who could still
+        // change it could swap their checked account onto someone else's.
+        if ($user->hasVerifiedSchoolId()) {
+            $rules['school_id'] = ['required', 'string', Rule::in([$user->school_id])];
+        }
+
+        $validated = $request->validate([
+            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            ...$rules,
+        ], [
+            ...HealthRecord::MESSAGES,
+            'school_id.in' => 'Your ID number was checked by the clinic, so only the nurse can change it.',
+        ], HealthRecord::ATTRIBUTE_NAMES);
+
+        $user->fill([
+            'email' => $validated['email'],
+            ...HealthRecord::attributes($validated),
+        ]);
+        $changed = array_keys($user->getDirty());
+        $user->save();
+
+        if ($changed !== []) {
+            // Field names only: the values are personal data.
+            app(AuditLogger::class)->log($user->id, 'profile.updated', $user, ['fields' => $changed]);
+        }
+
+        return response()->json($user->fresh());
     }
 
     /**

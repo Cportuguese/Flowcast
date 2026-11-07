@@ -22,12 +22,14 @@ class ReportController extends Controller
             'date_to' => ['required', 'date_format:Y-m-d', 'after_or_equal:date_from'],
         ]);
 
+        // Plain rows, not models: a range of years is tens of thousands of
+        // entries, and hydrating each one (and its dates) took seconds.
         $entries = QueueEntry::whereBetween('queue_date', [
             Carbon::createFromFormat('Y-m-d', $validated['date_from'])->startOfDay(),
             Carbon::createFromFormat('Y-m-d', $validated['date_to'])->startOfDay(),
-        ])->get();
+        ])->toBase()->get(['queue_date', 'source', 'status', 'joined_at', 'called_at', 'completed_at']);
 
-        $days = $entries->groupBy(fn (QueueEntry $entry) => $entry->queue_date->toDateString())
+        $days = $entries->groupBy(fn (object $entry) => substr($entry->queue_date, 0, 10))
             ->map(fn ($dayEntries, $date) => $this->summarizeQueueDay($date, $dayEntries))
             ->sortBy('date')
             ->values();
@@ -57,8 +59,11 @@ class ReportController extends Controller
             ->sortBy('date')
             ->values();
 
-        $topDiagnoses = $visits->groupBy('diagnosis')
-            ->map(fn ($group, $diagnosis) => ['diagnosis' => $diagnosis, 'count' => $group->count()])
+        // Complaints, not interventions: an intervention is a free-text
+        // account of what was done, while complaints repeat ("Headache",
+        // "Fever") and are what the clinic plans its stock and staffing by.
+        $topComplaints = $visits->groupBy('complaint')
+            ->map(fn ($group, $complaint) => ['complaint' => $complaint, 'count' => $group->count()])
             ->sortByDesc('count')
             ->take(10)
             ->values();
@@ -69,7 +74,7 @@ class ReportController extends Controller
             'total_visits' => $visits->count(),
             'referred_count' => $visits->whereNotNull('referred_to')->count(),
             'by_day' => $byDay,
-            'top_diagnoses' => $topDiagnoses,
+            'top_complaints' => $topComplaints,
         ]);
     }
 
@@ -147,10 +152,15 @@ class ReportController extends Controller
     /**
      * @return array<string, mixed>
      */
+    /**
+     * @param  Collection<int, object>  $entries  rows with the queue columns, as plain objects
+     */
     private function summarizeQueueDay(?string $date, Collection $entries): array
     {
-        $completed = $entries->filter(fn (QueueEntry $entry) => $entry->called_at && $entry->completed_at);
-        $called = $entries->filter(fn (QueueEntry $entry) => $entry->called_at);
+        $completed = $entries->filter(fn (object $entry) => $entry->called_at && $entry->completed_at);
+        $called = $entries->filter(fn (object $entry) => $entry->called_at);
+
+        $minutesBetween = fn (string $from, string $to): float => (strtotime($to) - strtotime($from)) / 60;
 
         return [
             'date' => $date,
@@ -161,10 +171,10 @@ class ReportController extends Controller
             'skipped' => $entries->where('status', 'skipped')->count(),
             'avg_wait_minutes' => $called->isEmpty()
                 ? null
-                : (int) round($called->avg(fn (QueueEntry $entry) => $entry->joined_at->diffInMinutes($entry->called_at))),
+                : (int) round($called->avg(fn (object $entry) => $minutesBetween($entry->joined_at, $entry->called_at))),
             'avg_consult_minutes' => $completed->isEmpty()
                 ? null
-                : (int) round($completed->avg(fn (QueueEntry $entry) => $entry->called_at->diffInMinutes($entry->completed_at))),
+                : (int) round($completed->avg(fn (object $entry) => $minutesBetween($entry->called_at, $entry->completed_at))),
         ];
     }
 }

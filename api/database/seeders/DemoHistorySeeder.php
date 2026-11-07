@@ -2,9 +2,10 @@
 
 namespace Database\Seeders;
 
-use App\Models\ClinicSchedule;
 use App\Models\EventDay;
 use App\Models\User;
+use Database\Seeders\Concerns\SamplesClinicalCases;
+use Database\Seeders\Concerns\SamplesPatients;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
@@ -17,56 +18,85 @@ use Illuminate\Support\Facades\Hash;
  * fit and this repository ships with none; any figure derived from it must
  * be described as simulated wherever it is presented.
  *
- * The history is generated from a process that is deliberately KNOWN, so
- * the trained model can be checked against ground truth rather than merely
- * admired:
+ * It simulates UDD's clinic as it actually runs: ONE nurse working the
+ * walk-in queue Monday to Saturday, 8 AM to 6 PM, a dentist seeing booked
+ * patients on Tuesdays and Thursdays and a school physician on Friday
+ * afternoons. The process is deliberately KNOWN, so the trained model can
+ * be checked against ground truth rather than merely admired:
  *
- * - per-weekday base arrival rates (see WEEKDAY_BASE_ARRIVALS)
+ * - per-weekday base walk-in rates (WEEKDAY_BASE_ARRIVALS), quieter Saturdays
  * - a midday dip in arrivals (HOURLY_SHAPE)
- * - a lift of EVENT_DAY_MULTIPLIER on flagged days: every weekday of an
- *   exam week, plus an occasional one-off campus event. That multiplier is
- *   deliberately NOT the 1.5 the old heuristic hardcoded, so it is visible
- *   whether the model learned the real number or inherited the guess
+ * - a lift of EVENT_DAY_MULTIPLIER on flagged days: every clinic day of an
+ *   exam week, plus an occasional one-off campus event. Deliberately NOT the
+ *   1.5 the old heuristic hardcoded, so it is visible whether the model
+ *   learned the real number or inherited the guess
  * - Poisson arrivals within each hour, lognormal consultation lengths
- * - one or two personnel on duty depending on the day's expected load
- * - a FIFO service simulation across those personnel, so joined_at,
- *   called_at and completed_at are mutually consistent rather than random
+ * - patients booked with the nurse are called at their booked time, ahead
+ *   of the walk-ins, if they arrive on time (as the live queue does)
+ * - a single-server service simulation, so joined_at, called_at and
+ *   completed_at are mutually consistent rather than random
  *
- * Because waits emerge from the simulated service loop, the true wait
- * scales with people-ahead DIVIDED BY the number of personnel — which is
- * exactly the relationship `people_ahead_per_staff` is there to capture and
- * the old people-ahead x consult-time heuristic cannot express.
+ * Because booked patients cut in at their time, a walk-in's wait depends on
+ * how many bookings fall due soon after they arrive — exactly what
+ * `bookings_due_next_hour` is there to capture and the old people-ahead x
+ * consult-time heuristic cannot see.
  *
  * Re-running wipes and regenerates the demo history; it is not additive.
  */
 class DemoHistorySeeder extends Seeder
 {
+    use SamplesClinicalCases;
+    use SamplesPatients;
+
     /** How much history to generate. */
     public const DAYS_OF_HISTORY = 182;
 
+    /** Overridable so a test can simulate a few weeks instead of six months. */
+    public int $days = self::DAYS_OF_HISTORY;
+
+    /** Overridable: a history of years needs far more than the alpha's 240 patients. */
+    public ?int $patientCount = null;
+
+    /**
+     * Over years a patient can only turn up while enrolled: a student whose
+     * ID says they entered in 2025 has no visits in 2023. Off by default so
+     * the six-month alpha history stays exactly as it was.
+     */
+    public bool $enrollmentAware = false;
+
     /** Fixed so a rerun reproduces the same history for the same write-up. */
-    private const RANDOM_SEED = 20260926;
+    private const RANDOM_SEED = 20261012;
 
     private const PATIENT_COUNT = 240;
+
+    /** Students are treated as enrolled for this many years after entry. */
+    private const YEARS_ENROLLED = 6;
+
+    private Carbon $historyStart;
+
+    /**
+     * Patient ids enrolled in each month (year * 12 + month), when
+     * $enrollmentAware is on.
+     *
+     * @var array<int, array<int, int>>
+     */
+    private array $enrolledByMonth = [];
 
     /** Marks event days this seeder owns, so a rerun can clear its own. */
     private const SYNTHETIC_NOTE = 'Synthetic demo data.';
 
     /**
-     * Mean arrivals on an ordinary day, by day of week (0 = Sunday).
-     *
-     * Set against SECOND_STAFF_THRESHOLD so the clinic runs at a realistic
-     * 50-85% utilisation: Wednesday and Friday fall below the threshold and
-     * are staffed by one nurse, the rest by two. That deliberately makes
-     * Wednesday the worst day to visit despite being one of the quietest —
-     * a staffing effect no arrivals-only forecast can see.
+     * Mean walk-ins on an ordinary day, by day of week (0 = Sunday, closed).
+     * One nurse with ~9-minute consultations can see about 65 people in a
+     * ten-hour day, so ordinary days run at a realistic 50-70% load and
+     * event days push close to the limit.
      */
-    private const WEEKDAY_BASE_ARRIVALS = [1 => 58, 2 => 48, 3 => 40, 4 => 46, 5 => 34];
+    private const WEEKDAY_BASE_ARRIVALS = [1 => 44, 2 => 38, 3 => 36, 4 => 38, 5 => 34, 6 => 16];
 
-    /** Share of a day's arrivals landing in each opening hour. */
+    /** Share of a day's walk-ins arriving in each opening hour. */
     private const HOURLY_SHAPE = [
-        8 => 0.14, 9 => 0.16, 10 => 0.15, 11 => 0.12, 12 => 0.05,
-        13 => 0.10, 14 => 0.12, 15 => 0.09, 16 => 0.07,
+        8 => 0.12, 9 => 0.14, 10 => 0.13, 11 => 0.11, 12 => 0.05,
+        13 => 0.10, 14 => 0.11, 15 => 0.10, 16 => 0.08, 17 => 0.06,
     ];
 
     /**
@@ -76,44 +106,40 @@ class DemoHistorySeeder extends Seeder
      */
     private const EVENT_DAY_MULTIPLIER = 1.45;
 
-    /** Expected arrivals at or above which a second nurse is rostered. */
-    private const SECOND_STAFF_THRESHOLD = 44;
-
     /** Lognormal consultation length: median e^LOG_CONSULT_MU minutes. */
-    private const LOG_CONSULT_MU = 2.35;
+    private const LOG_CONSULT_MU = 2.1;
 
-    private const LOG_CONSULT_SIGMA = 0.42;
+    private const LOG_CONSULT_SIGMA = 0.45;
 
     private const MIN_CONSULT_MINUTES = 3;
 
-    private const MAX_CONSULT_MINUTES = 35;
+    private const MAX_CONSULT_MINUTES = 30;
 
     /** Arrivals still uncalled this long after closing are marked skipped. */
     private const GRACE_MINUTES_AFTER_CLOSE = 30;
 
-    /** Share of arrivals that came from a booked appointment. */
-    private const APPOINTMENT_SHARE = 0.32;
+    /** Share of called patients who had already left (skipped). */
+    private const NOT_THERE_SHARE = 0.03;
 
-    /** Share of booked appointments the patient never showed up for. */
-    private const NO_SHOW_SHARE = 0.12;
+    /** Mean confirmed-or-not bookings per open day, per professional. */
+    private const BOOKINGS_PER_DAY = ['nurse' => 3.0, 'dentist' => 7.0, 'physician' => 4.0];
 
-    /** Share of completed consultations that produced a visit record. */
-    private const VISIT_RECORD_SHARE = 0.85;
+    /**
+     * What happens to a booking. The nurse's on-time patients go through
+     * her queue; late ones (past the 15-minute grace) wait like walk-ins.
+     *
+     * @var array<string, float> outcome => share
+     */
+    private const NURSE_BOOKING_OUTCOMES = ['declined' => 0.03, 'cancelled' => 0.05, 'no_show' => 0.08, 'late' => 0.08, 'on_time' => 0.76];
 
-    /** @var array<int, string> */
-    private const COMPLAINTS = [
-        'Headache', 'Fever', 'Sore throat', 'Stomach ache', 'Dizziness',
-        'Cough and colds', 'Dysmenorrhea', 'Minor wound', 'Toothache',
-        'Body pain', 'Allergic reaction', 'Eye irritation',
-    ];
+    /** @var array<string, float> */
+    private const BOOKED_DAY_OUTCOMES = ['declined' => 0.02, 'cancelled' => 0.05, 'no_show' => 0.09, 'completed' => 0.84];
 
-    /** @var array<int, string> */
-    private const DIAGNOSES = [
-        'Acute upper respiratory infection', 'Tension headache', 'Gastritis',
-        'Viral fever', 'Pharyngitis', 'Primary dysmenorrhea',
-        'Superficial laceration', 'Allergic rhinitis', 'Conjunctivitis',
-        'Musculoskeletal strain', 'Migraine', 'Dehydration',
-    ];
+    /** How late counts as late — the same grace the live queue gives. */
+    private const LATE_GRACE_MINUTES = 15;
+
+    /** Share of completed queue consultations that produced a visit record. */
+    private const VISIT_RECORD_SHARE = 0.9;
 
     public function run(): void
     {
@@ -123,69 +149,56 @@ class DemoHistorySeeder extends Seeder
             return;
         }
 
-        mt_srand(self::RANDOM_SEED);
-
         $this->command?->warn('Generating SYNTHETIC clinic history — not real patient data.');
 
-        $this->ensureSchedules();
-        $staff = $this->ensureStaff();
+        $providers = $this->ensureClinic();
+
+        $this->historyStart = Carbon::today()->subDays($this->days);
+
+        // Patients get their own seed so the simulation below draws the same
+        // numbers whether or not the patients already existed.
+        mt_srand(self::RANDOM_SEED + 1);
         $patients = $this->ensurePatients();
 
-        $start = Carbon::today()->subDays(self::DAYS_OF_HISTORY);
+        if ($this->enrollmentAware) {
+            $this->enrolledByMonth = $this->enrollmentByMonth($patients);
+        }
+
+        mt_srand(self::RANDOM_SEED);
+        $start = $this->historyStart->copy();
 
         $this->purgePreviousHistory($start);
 
         $eventDates = $this->seedEventDays($start);
 
-        $days = $this->simulate($start, $patients, $staff, $eventDates);
+        $totals = $this->simulate($start, $patients, $providers, $eventDates);
 
-        $this->command?->info("Generated {$days['entries']} queue entries across {$days['days']} clinic day(s).");
+        $this->command?->info("Generated {$totals['entries']} queue entries and {$totals['bookings']} bookings across {$totals['days']} clinic day(s).");
 
         $this->snapshot($start);
     }
 
     /**
-     * Mon-Fri 08:00-17:00, created only if the clinic has no schedule yet.
-     */
-    private function ensureSchedules(): void
-    {
-        foreach (array_keys(self::WEEKDAY_BASE_ARRIVALS) as $dayOfWeek) {
-            ClinicSchedule::firstOrCreate(
-                ['day_of_week' => $dayOfWeek],
-                [
-                    'start_time' => '08:00:00',
-                    'end_time' => '17:00:00',
-                    'slot_minutes' => 20,
-                    'capacity' => 3,
-                    'is_active' => true,
-                ],
-            );
-        }
-    }
-
-    /**
-     * Two nurses to attribute consultations to, so `active_staff` varies.
+     * The three professionals and the clinic's hours. A fresh database gets
+     * the dev accounts; one that has them only gets any missing hours.
      *
-     * @return array<int, int> user ids
+     * @return array{nurse: int, dentist: int, physician: int}
      */
-    private function ensureStaff(): array
+    private function ensureClinic(): array
     {
-        $ids = [];
+        $missing = fn (): bool => User::providers()->distinct()->count('profession') < 3;
 
-        foreach ([1, 2] as $index) {
-            $user = User::firstOrNew(['email' => "demo.nurse{$index}@flowcast.test"]);
-            $user->fill([
-                'name' => "Demo Nurse {$index}",
-                'password' => Hash::make('password'),
-            ]);
-            $user->role = 'personnel';
-            $user->email_verified_at ??= now();
-            $user->save();
-
-            $ids[] = $user->id;
+        if ($missing()) {
+            $this->call(DevUsersSeeder::class);
+        } else {
+            $this->call(ClinicSetupSeeder::class);
         }
 
-        return $ids;
+        return [
+            'nurse' => (int) User::providers()->where('profession', 'nurse')->value('id'),
+            'dentist' => (int) User::providers()->where('profession', 'dentist')->value('id'),
+            'physician' => (int) User::providers()->where('profession', 'physician')->value('id'),
+        ];
     }
 
     /**
@@ -193,32 +206,35 @@ class DemoHistorySeeder extends Seeder
      */
     private function ensurePatients(): array
     {
-        $existing = User::where('email', 'like', 'demo.patient%@flowcast.test')
-            ->pluck('id', 'email')
-            ->all();
+        $existing = User::where('email', 'like', 'demo.patient%@flowcast.test')->pluck('id', 'email')->all();
+        $this->usedIdNumbers = User::whereNotNull('school_id')->pluck('school_id')->flip()->map(fn () => true)->all();
 
         $password = Hash::make('password');
         $now = now();
         $new = [];
+        // Returning patients: the nurse checked each one's UDD ID card on
+        // their first visit.
+        $nurseId = User::where('profession', 'nurse')->value('id');
 
-        for ($i = 1; $i <= self::PATIENT_COUNT; $i++) {
+        for ($i = 1; $i <= ($this->patientCount ?? self::PATIENT_COUNT); $i++) {
             $email = "demo.patient{$i}@flowcast.test";
+            $row = $this->samplePatientRow($i, $email);
 
             if (isset($existing[$email])) {
                 continue;
             }
 
-            $new[] = [
-                'name' => "Demo Patient {$i}",
-                'email' => $email,
+            // Over a long history the account is as old as the patient's
+            // time at the clinic, not all created on the day of seeding.
+            $registered = $this->enrollmentAware ? $this->registeredAt($row) : $now;
+
+            $new[] = $row + [
                 'password' => $password,
-                'role' => 'patient',
-                'school_id' => sprintf('2023-%05d', $i),
-                'patient_type' => ['student', 'student', 'student', 'faculty', 'staff'][$i % 5],
-                'contact_no' => sprintf('0917%07d', $i),
-                'email_verified_at' => $now,
-                'created_at' => $now,
-                'updated_at' => $now,
+                'email_verified_at' => $registered,
+                'school_id_verified_at' => $registered,
+                'school_id_verified_by_id' => $nurseId,
+                'created_at' => $registered,
+                'updated_at' => $registered,
             ];
         }
 
@@ -230,8 +246,94 @@ class DemoHistorySeeder extends Seeder
     }
 
     /**
-     * The days an admin would have flagged: every weekday of an exam week,
-     * plus a one-off campus event roughly every third week.
+     * The year a student entered, from the first two digits of their UDD ID
+     * number (23-1057-651). Null for faculty and staff, who have no entry
+     * year in their ID number and are always enrolled — and for the graduate
+     * students whose ID is too old to still be an undergraduate's (a master's
+     * student's ID can date from long before the history begins).
+     *
+     * @param  array<string, mixed>  $patient  a users row: school_id, patient_type
+     */
+    private function entryYear(array $patient): ?int
+    {
+        if (($patient['patient_type'] ?? null) !== 'student' || ! preg_match('/^(\d{2})-\d{4}-\d{3}$/', (string) ($patient['school_id'] ?? ''), $parts)) {
+            return null;
+        }
+
+        $entry = 2000 + (int) $parts[1];
+
+        return $entry + self::YEARS_ENROLLED < $this->historyStart->year ? null : $entry;
+    }
+
+    /**
+     * When the patient's account was made: a student at the start of the
+     * school year they entered (June). Anyone already at the clinic when the
+     * history begins — faculty and staff, students who entered earlier —
+     * registered in the weeks before it, when the system went live.
+     *
+     * @param  array<string, mixed>  $patient
+     */
+    private function registeredAt(array $patient): string
+    {
+        $entry = $this->entryYear($patient);
+        $goLive = $this->historyStart->copy()->subDays(mt_rand(1, 60));
+
+        $date = $entry === null
+            ? $goLive
+            : Carbon::create($entry, 6, 1)->addDays(mt_rand(0, 29))->max($goLive);
+
+        return $date->setTime(mt_rand(8, 17), mt_rand(0, 59))->toDateTimeString();
+    }
+
+    /**
+     * Which patients can have a visit in each month of the history: students
+     * from the July after their entry year for YEARS_ENROLLED years, faculty
+     * and staff throughout.
+     *
+     * @param  array<int, int>  $patientIds
+     * @return array<int, array<int, int>> (year * 12 + month) => patient ids
+     */
+    private function enrollmentByMonth(array $patientIds): array
+    {
+        $patients = User::whereIn('id', $patientIds)->get(['id', 'school_id', 'patient_type'])->all();
+        $byMonth = [];
+
+        for ($cursor = $this->historyStart->copy()->startOfMonth(); $cursor->lessThanOrEqualTo(Carbon::today()); $cursor->addMonth()) {
+            $key = $cursor->year * 12 + $cursor->month;
+
+            foreach ($patients as $patient) {
+                $entry = $this->entryYear($patient->only(['school_id', 'patient_type']));
+                $enrolled = $entry === null
+                    || ($key >= $entry * 12 + 7 && $key <= ($entry + self::YEARS_ENROLLED) * 12 + 12);
+
+                if ($enrolled) {
+                    $byMonth[$key][] = $patient->id;
+                }
+            }
+
+            $byMonth[$key] ??= $patientIds;
+        }
+
+        return $byMonth;
+    }
+
+    /**
+     * A random patient for a visit on $date. With enrollment on, only one
+     * enrolled that month; otherwise any (one draw either way, so the
+     * alpha history is reproduced exactly).
+     *
+     * @param  array<int, int>  $patients
+     */
+    private function patientFor(Carbon $date, array $patients): int
+    {
+        $pool = $this->enrolledByMonth[$date->year * 12 + $date->month] ?? $patients;
+
+        return $pool[mt_rand(0, count($pool) - 1)];
+    }
+
+    /**
+     * The days an admin would have flagged: every clinic day of an exam
+     * week, plus a one-off campus event roughly every third week.
      *
      * Flagging is the ONLY mechanism that lifts a day's volume, so
      * `is_event_day` has exactly one true effect — EVENT_DAY_MULTIPLIER —
@@ -247,11 +349,11 @@ class DemoHistorySeeder extends Seeder
         $oneOffIndex = 0;
 
         while ($cursor->lessThanOrEqualTo(Carbon::today())) {
-            $isWeekday = isset(self::WEEKDAY_BASE_ARRIVALS[$cursor->dayOfWeek]);
+            $isClinicDay = isset(self::WEEKDAY_BASE_ARRIVALS[$cursor->dayOfWeek]);
 
-            if ($isWeekday && $this->isExamWeek($cursor)) {
+            if ($isClinicDay && $this->isExamWeek($cursor)) {
                 $labels[$cursor->toDateString()] = 'Examination week';
-            } elseif ($isWeekday && $cursor->dayOfWeek === 3 && (int) $cursor->format('W') % 3 === 0) {
+            } elseif ($isClinicDay && $cursor->dayOfWeek === 3 && (int) $cursor->format('W') % 3 === 0) {
                 $labels[$cursor->toDateString()] = $oneOffs[$oneOffIndex++ % count($oneOffs)];
             }
 
@@ -285,74 +387,333 @@ class DemoHistorySeeder extends Seeder
     {
         $patientIds = User::where('email', 'like', 'demo.patient%@flowcast.test')->pluck('id');
 
-        if ($patientIds->isEmpty()) {
-            return;
+        if ($patientIds->isNotEmpty()) {
+            DB::table('visit_records')->whereIn('patient_id', $patientIds)->delete();
+            DB::table('queue_entries')->whereIn('patient_id', $patientIds)->delete();
+            DB::table('appointments')->whereIn('patient_id', $patientIds)->delete();
         }
 
-        $entryIds = DB::table('queue_entries')->whereIn('patient_id', $patientIds)->pluck('id');
-
-        DB::table('visit_records')->whereIn('queue_entry_id', $entryIds)->delete();
-        DB::table('queue_entries')->whereIn('id', $entryIds)->delete();
-        DB::table('appointments')->whereIn('patient_id', $patientIds)->delete();
         DB::table('event_days')->where('note', self::SYNTHETIC_NOTE)->delete();
         DB::table('analytics_snapshots')->where('date', '>=', $start->toDateString())->delete();
     }
 
     /**
-     * Walk every clinic day in the window, generate its arrivals, serve them
-     * through a FIFO queue with as many parallel servers as there are
-     * personnel on duty, and write the day before moving on.
+     * Walk every clinic day in the window: the nurse's queue every day, the
+     * dentist's and the physician's booked patients on their days.
      *
      * @param  array<int, int>  $patients
-     * @param  array<int, int>  $staff
+     * @param  array{nurse: int, dentist: int, physician: int}  $providers
      * @param  array<string, bool>  $eventDates
-     * @return array{days: int, entries: int}
+     * @return array{days: int, entries: int, bookings: int}
      */
-    private function simulate(Carbon $start, array $patients, array $staff, array $eventDates): array
+    private function simulate(Carbon $start, array $patients, array $providers, array $eventDates): array
     {
-        $dayCount = 0;
-        $entryCount = 0;
+        $totals = ['days' => 0, 'entries' => 0, 'bookings' => 0];
         $now = now();
-        $cursor = $start->copy();
 
-        while ($cursor->lessThan(Carbon::today())) {
-            $base = self::WEEKDAY_BASE_ARRIVALS[$cursor->dayOfWeek] ?? null;
+        for ($date = $start->copy(); $date->lessThan(Carbon::today()); $date->addDay()) {
+            $base = self::WEEKDAY_BASE_ARRIVALS[$date->dayOfWeek] ?? null;
 
             if ($base === null) {
-                $cursor->addDay();
+                continue;
+            }
+
+            $isEventDay = isset($eventDates[$date->toDateString()]);
+            $day = ['appointments' => [], 'entries' => [], 'visits' => []];
+
+            $this->simulateNurseDay($day, $date, $isEventDay ? $base * self::EVENT_DAY_MULTIPLIER : $base, $isEventDay, $patients, $providers['nurse'], $now);
+
+            // Online booking is closed on event days, for everyone.
+            if (! $isEventDay) {
+                foreach (['dentist', 'physician'] as $profession) {
+                    $this->simulateBookedDay($day, $date, $profession, $providers[$profession], $providers['nurse'], $patients);
+                }
+            }
+
+            $this->persistDay($date, $day);
+
+            $totals['days']++;
+            $totals['entries'] += count($day['entries']);
+            $totals['bookings'] += count($day['appointments']);
+        }
+
+        return $totals;
+    }
+
+    /**
+     * One day of the nurse's queue: her bookings for the day, Poisson
+     * walk-ins, then a single-server service loop that takes a booked
+     * patient at their booked time (if they came on time) and otherwise the
+     * lowest queue number — the live Call Next rule.
+     *
+     * @param  array{appointments: array<int, array<string, mixed>>, entries: array<int, array<string, mixed>>, visits: array<int, array<string, mixed>>}  $day
+     * @param  array<int, int>  $patients
+     */
+    private function simulateNurseDay(array &$day, Carbon $date, float $expected, bool $isEventDay, array $patients, int $nurseId, Carbon $now): void
+    {
+        $open = $date->copy()->setTime(8, 0);
+        $close = $date->copy()->setTime(18, 0);
+        $cutoff = $close->copy()->addMinutes(self::GRACE_MINUTES_AFTER_CLOSE)->getTimestamp();
+        $graceSeconds = self::LATE_GRACE_MINUTES * 60;
+
+        /** @var array<int, array{joined: int, patient_id: int, appointment_key: int|null, slot: int|null}> $arrivals */
+        $arrivals = [];
+
+        if (! $isEventDay) {
+            foreach ($this->bookedSlots($date, 'nurse') as $slot) {
+                $patientId = $this->patientFor($date, $patients);
+                $outcome = $this->pickOutcome(self::NURSE_BOOKING_OUTCOMES);
+                $status = match ($outcome) {
+                    'declined', 'cancelled', 'no_show' => $outcome,
+                    default => 'checked_in', // settled once the queue has run
+                };
+                $key = count($day['appointments']);
+                $day['appointments'][] = $this->bookingRow($patientId, $nurseId, $nurseId, $slot, self::NURSE_BOOKING_REASONS[mt_rand(0, count(self::NURSE_BOOKING_REASONS) - 1)], $status);
+
+                if (! in_array($outcome, ['on_time', 'late'], true)) {
+                    continue;
+                }
+
+                $arrives = $outcome === 'on_time'
+                    ? $slot->copy()->addMinutes(mt_rand(-25, 8))
+                    : $slot->copy()->addMinutes(mt_rand(self::LATE_GRACE_MINUTES + 1, 45));
+
+                if ($arrives->greaterThanOrEqualTo($close)) {
+                    $day['appointments'][$key]['status'] = 'no_show';
+
+                    continue;
+                }
+
+                $arrivals[] = [
+                    'joined' => max($arrives->getTimestamp(), $open->getTimestamp()),
+                    'patient_id' => $patientId,
+                    'appointment_key' => $key,
+                    'slot' => $slot->getTimestamp(),
+                ];
+            }
+        }
+
+        foreach ($this->arrivalTimes($date, $expected) as $arrivedAt) {
+            $arrivals[] = [
+                'joined' => $arrivedAt->getTimestamp(),
+                'patient_id' => $this->patientFor($date, $patients),
+                'appointment_key' => null,
+                'slot' => null,
+            ];
+        }
+
+        usort($arrivals, static fn (array $a, array $b): int => $a['joined'] <=> $b['joined']);
+
+        // Queue numbers follow arrival order, as check-in assigns them.
+        $outcomes = [];
+        $remaining = array_keys($arrivals);
+        $nurseFreeAt = $open->getTimestamp();
+
+        while ($remaining !== []) {
+            $clock = $nurseFreeAt;
+            $waiting = array_values(array_filter($remaining, fn (int $i): bool => $arrivals[$i]['joined'] <= $clock));
+
+            if ($waiting === []) {
+                $nurseFreeAt = min(array_map(fn (int $i): int => $arrivals[$i]['joined'], $remaining));
 
                 continue;
             }
 
-            $expected = $base;
+            if ($clock > $cutoff) {
+                foreach ($remaining as $i) {
+                    $outcomes[$i] = ['status' => 'skipped', 'called' => null, 'completed' => null];
+                }
 
-            if (isset($eventDates[$cursor->toDateString()])) {
-                $expected *= self::EVENT_DAY_MULTIPLIER;
+                break;
             }
 
-            $onDuty = $expected >= self::SECOND_STAFF_THRESHOLD ? 2 : 1;
-            $day = $this->simulateDay($cursor, $expected, $onDuty, $patients, $staff, $now);
+            $next = $this->nextToCall($arrivals, $waiting, $clock, $graceSeconds);
+            $remaining = array_values(array_diff($remaining, [$next]));
 
-            $this->persistDay($cursor, $day);
+            if ($this->chance(self::NOT_THERE_SHARE)) {
+                $outcomes[$next] = ['status' => 'skipped', 'called' => $clock, 'completed' => null];
+                $nurseFreeAt = $clock + 60;
 
-            $entryCount += count($day['entries']);
-            $dayCount++;
-            $cursor->addDay();
+                continue;
+            }
+
+            $completed = $clock + $this->consultMinutes() * 60;
+            $outcomes[$next] = ['status' => 'done', 'called' => $clock, 'completed' => $completed];
+            $nurseFreeAt = $completed;
         }
 
-        return ['days' => $dayCount, 'entries' => $entryCount];
+        foreach ($arrivals as $i => $arrival) {
+            $outcome = $outcomes[$i];
+            $entryIndex = count($day['entries']);
+            $at = fn (?int $timestamp): ?string => $timestamp === null ? null : Carbon::createFromTimestamp($timestamp, $date->getTimezone())->toDateTimeString();
+
+            $day['entries'][] = [
+                'queue_number' => $i + 1,
+                // Written with the midnight time Eloquent's date cast uses,
+                // so SQLite's string comparison matches it too.
+                'queue_date' => $date->copy()->startOfDay()->toDateTimeString(),
+                'patient_id' => $arrival['patient_id'],
+                'source' => $arrival['appointment_key'] === null ? 'walk_in' : 'appointment',
+                'status' => $outcome['status'],
+                'appointment_key' => $arrival['appointment_key'],
+                'handled_by_id' => $outcome['called'] === null ? null : $nurseId,
+                'joined_at' => $at($arrival['joined']),
+                'called_at' => $at($outcome['called']),
+                'completed_at' => $at($outcome['completed']),
+                'created_at' => $now->toDateTimeString(),
+                'updated_at' => $now->toDateTimeString(),
+            ];
+
+            if ($arrival['appointment_key'] !== null) {
+                $day['appointments'][$arrival['appointment_key']]['status'] = $outcome['status'] === 'done' ? 'completed' : 'no_show';
+            }
+
+            if ($outcome['status'] === 'done' && $this->chance(self::VISIT_RECORD_SHARE)) {
+                $complaint = $arrival['appointment_key'] === null
+                    ? self::NURSE_COMPLAINTS[mt_rand(0, count(self::NURSE_COMPLAINTS) - 1)]
+                    : $day['appointments'][$arrival['appointment_key']]['reason'];
+
+                $day['visits'][] = $this->visitRow($arrival['patient_id'], $nurseId, $complaint, $at($outcome['completed'])) + ['entry_index' => $entryIndex];
+            }
+        }
     }
 
     /**
-     * Write one day, resolving each entry's `appointment_key` placeholder to
-     * the id of the appointment row just inserted for it.
+     * The live Call Next rule: a booked patient whose time has come, and who
+     * arrived within the grace, goes first (earliest booking first);
+     * otherwise the lowest queue number.
      *
-     * Rows a developer created by hand on a generated date are left alone:
-     * queue numbers continue from whatever is already there, and the ids
-     * mapped back are only the ones this call inserted. Re-running therefore
-     * replaces the synthetic history without touching anything else.
+     * @param  array<int, array{joined: int, patient_id: int, appointment_key: int|null, slot: int|null}>  $arrivals
+     * @param  array<int, int>  $waiting  arrival indexes, ascending
+     */
+    private function nextToCall(array $arrivals, array $waiting, int $now, int $graceSeconds): int
+    {
+        $due = array_filter($waiting, fn (int $i): bool => $arrivals[$i]['slot'] !== null
+            && $arrivals[$i]['slot'] <= $now
+            && $arrivals[$i]['joined'] <= $arrivals[$i]['slot'] + $graceSeconds);
+
+        if ($due === []) {
+            return $waiting[0];
+        }
+
+        usort($due, fn (int $a, int $b): int => [$arrivals[$a]['slot'], $a] <=> [$arrivals[$b]['slot'], $b]);
+
+        return $due[0];
+    }
+
+    /**
+     * The dentist's or the physician's day: bookings in their own hours,
+     * seen at the booked time, each completed one with a visit record.
      *
-     * @param  array{entries: array<int, array<string, mixed>>, appointments: array<int, array<string, mixed>>, visits: array<int, array<string, mixed>>}  $day
+     * @param  array{appointments: array<int, array<string, mixed>>, entries: array<int, array<string, mixed>>, visits: array<int, array<string, mixed>>}  $day
+     * @param  array<int, int>  $patients
+     */
+    private function simulateBookedDay(array &$day, Carbon $date, string $profession, int $providerId, int $nurseId, array $patients): void
+    {
+        $complaints = $profession === 'dentist' ? self::DENTIST_COMPLAINTS : self::PHYSICIAN_COMPLAINTS;
+        $slotMinutes = ClinicSetupSeeder::BOOKING_HOURS[$profession][3];
+
+        foreach ($this->bookedSlots($date, $profession) as $slot) {
+            $patientId = $this->patientFor($date, $patients);
+            $reason = $complaints[mt_rand(0, count($complaints) - 1)];
+            $status = $this->pickOutcome(self::BOOKED_DAY_OUTCOMES);
+
+            $key = count($day['appointments']);
+            $day['appointments'][] = $this->bookingRow($patientId, $providerId, $nurseId, $slot, $reason, $status);
+
+            if ($status === 'completed') {
+                $seenAt = $slot->copy()->addMinutes(mt_rand(10, max($slotMinutes - 2, 11)))->toDateTimeString();
+                $day['visits'][] = $this->visitRow($patientId, $providerId, $reason, $seenAt) + ['appointment_key' => $key];
+            }
+        }
+    }
+
+    /**
+     * Distinct booked slot starts for one professional on $date (none on a
+     * day they do not work), one booking per slot.
+     *
+     * @return array<int, Carbon>
+     */
+    private function bookedSlots(Carbon $date, string $profession): array
+    {
+        [$days, $start, $end, $slotMinutes] = ClinicSetupSeeder::BOOKING_HOURS[$profession];
+
+        if (! in_array($date->dayOfWeek, $days, true)) {
+            return [];
+        }
+
+        $slots = [];
+        for ($cursor = Carbon::parse($date->toDateString().' '.$start); $cursor->copy()->addMinutes($slotMinutes)->lte(Carbon::parse($date->toDateString().' '.$end)); $cursor->addMinutes($slotMinutes)) {
+            $slots[] = $cursor->copy();
+        }
+
+        $count = min($this->poisson(self::BOOKINGS_PER_DAY[$profession]), count($slots));
+        $chosen = [];
+
+        while (count($chosen) < $count) {
+            $chosen[mt_rand(0, count($slots) - 1)] = true;
+        }
+
+        ksort($chosen);
+
+        return array_map(fn (int $index): Carbon => $slots[$index], array_keys($chosen));
+    }
+
+    /**
+     * A booking as the review step leaves it: made a few evenings before,
+     * reviewed by the head nurse that night unless the patient withdrew it
+     * first.
+     *
+     * @return array<string, mixed>
+     */
+    private function bookingRow(int $patientId, int $providerId, int $nurseId, Carbon $slot, string $reason, string $status): array
+    {
+        $madeAt = $slot->copy()->subDays(mt_rand(1, 6))->setTime(mt_rand(18, 21), mt_rand(0, 59));
+        $reviewed = $status !== 'cancelled' || $this->chance(0.5);
+        $reviewedAt = $madeAt->copy()->addMinutes(mt_rand(20, 600));
+
+        return [
+            'patient_id' => $patientId,
+            'provider_id' => $providerId,
+            'scheduled_at' => $slot->toDateTimeString(),
+            'reason' => $reason,
+            'status' => $status,
+            'cancel_reason' => $status === 'cancelled' ? 'Schedule conflict with a class.' : null,
+            'reviewed_by_id' => $reviewed ? $nurseId : null,
+            'reviewed_at' => $reviewed ? $reviewedAt->toDateTimeString() : null,
+            'review_note' => $status === 'declined' ? 'That time is already taken by a school activity. Please choose another slot.' : null,
+            'created_at' => $madeAt->toDateTimeString(),
+            'updated_at' => ($reviewed ? $reviewedAt : $madeAt)->toDateTimeString(),
+        ];
+    }
+
+    /**
+     * A visit record with a placeholder intervention; AlphaSampleDataSeeder
+     * later rewrites it, the remarks and the vitals to fit the complaint.
+     *
+     * @return array<string, mixed>
+     */
+    private function visitRow(int $patientId, int $createdById, string $complaint, string $at): array
+    {
+        return [
+            'patient_id' => $patientId,
+            'created_by_id' => $createdById,
+            'complaint' => $complaint,
+            'intervention' => 'Assessed and managed in the clinic.',
+            'created_at' => $at,
+            'updated_at' => $at,
+        ];
+    }
+
+    /**
+     * Write one day, resolving each placeholder key to the id of the row
+     * just inserted for it: appointments first, then queue entries (which
+     * point at appointments), then visits (which point at either).
+     *
+     * Queue numbers continue from whatever a developer already created on a
+     * generated date, so a rerun never collides with hand-made rows.
+     *
+     * @param  array{appointments: array<int, array<string, mixed>>, entries: array<int, array<string, mixed>>, visits: array<int, array<string, mixed>>}  $day
      */
     private function persistDay(Carbon $date, array $day): void
     {
@@ -360,54 +721,40 @@ class DemoHistorySeeder extends Seeder
 
         if ($day['appointments'] !== []) {
             DB::table('appointments')->insert($day['appointments']);
-
             $appointmentIds = $this->lastInsertedIds('appointments', count($day['appointments']));
         }
 
-        $checkedInKeys = [];
+        $entryIds = [];
 
-        foreach ($day['appointments'] as $index => $appointment) {
-            if ($appointment['status'] === 'checked_in') {
-                $checkedInKeys[$index] = $appointmentIds[$index] ?? null;
-            }
+        if ($day['entries'] !== []) {
+            $queueOffset = (int) DB::table('queue_entries')->whereDate('queue_date', $date)->max('queue_number');
+
+            $rows = array_map(function (array $entry) use ($appointmentIds, $queueOffset): array {
+                $key = $entry['appointment_key'];
+                unset($entry['appointment_key']);
+
+                return [
+                    ...$entry,
+                    'queue_number' => $entry['queue_number'] + $queueOffset,
+                    'appointment_id' => $key === null ? null : $appointmentIds[$key],
+                ];
+            }, $day['entries']);
+
+            DB::table('queue_entries')->insert($rows);
+            $entryIds = $this->lastInsertedIds('queue_entries', count($rows));
         }
 
-        $queueOffset = (int) DB::table('queue_entries')->where('queue_date', $date->toDateString())->max('queue_number');
-        $entryRows = [];
+        $visitRows = array_map(function (array $visit) use ($entryIds, $appointmentIds): array {
+            $entryIndex = $visit['entry_index'] ?? null;
+            $appointmentKey = $visit['appointment_key'] ?? null;
+            unset($visit['entry_index'], $visit['appointment_key']);
 
-        foreach ($day['entries'] as $entry) {
-            $key = $entry['appointment_key'];
-            unset($entry['appointment_key']);
-
-            $entry['queue_number'] += $queueOffset;
-            $entry['appointment_id'] = $key === null ? null : ($checkedInKeys[$key] ?? null);
-            $entryRows[] = $entry;
-        }
-
-        if ($entryRows === []) {
-            return;
-        }
-
-        DB::table('queue_entries')->insert($entryRows);
-
-        $entryIds = $this->lastInsertedIds('queue_entries', count($entryRows));
-        $visitRows = [];
-
-        foreach ($day['visits'] as $visit) {
-            $entryId = $entryIds[$visit['entry_index']] ?? null;
-
-            if ($entryId === null) {
-                continue;
-            }
-
-            unset($visit['entry_index']);
-            $visitRows[] = $visit + [
-                'queue_entry_id' => $entryId,
-                'complaint' => $this->complaint(),
-                'diagnosis' => $this->diagnosis(),
-                'treatment' => 'Advised rest and fluids.',
+            return [
+                ...$visit,
+                'queue_entry_id' => $entryIndex === null ? null : $entryIds[$entryIndex],
+                'appointment_id' => $appointmentKey === null ? null : $appointmentIds[$appointmentKey],
             ];
-        }
+        }, $day['visits']);
 
         if ($visitRows !== []) {
             DB::table('visit_records')->insert($visitRows);
@@ -433,147 +780,7 @@ class DemoHistorySeeder extends Seeder
     }
 
     /**
-     * One clinic day: Poisson arrivals shaped across the opening hours, then
-     * served first-come-first-served by $onDuty parallel personnel.
-     *
-     * @param  array<int, int>  $patients
-     * @param  array<int, int>  $staff
-     * @return array{entries: array<int, array<string, mixed>>, appointments: array<int, array<string, mixed>>, visits: array<int, array<string, mixed>>}
-     */
-    private function simulateDay(Carbon $date, float $expected, int $onDuty, array $patients, array $staff, Carbon $now): array
-    {
-        $arrivals = $this->arrivalTimes($date, $expected);
-
-        if ($arrivals === []) {
-            return ['entries' => [], 'appointments' => [], 'visits' => []];
-        }
-
-        $cutoff = $date->copy()->setTime(17, 0)->addMinutes(self::GRACE_MINUTES_AFTER_CLOSE);
-
-        /** Next free moment for each nurse on duty. */
-        $serverFreeAt = array_fill(0, $onDuty, $date->copy()->setTime(8, 0)->getTimestamp());
-
-        $entries = [];
-        $appointments = [];
-        $visits = [];
-        $chosenPatients = $this->pickPatients($patients, count($arrivals));
-
-        foreach ($arrivals as $index => $arrivedAt) {
-            $earliest = min($serverFreeAt);
-            $server = (int) array_search($earliest, $serverFreeAt, true);
-            $calledAt = $arrivedAt->copy()->setTimestamp(max($earliest, $arrivedAt->getTimestamp()));
-
-            $isAppointment = $this->chance(self::APPOINTMENT_SHARE);
-            $patientId = $chosenPatients[$index];
-            $appointmentKey = null;
-
-            if ($isAppointment) {
-                $appointmentKey = count($appointments);
-                $appointments[] = [
-                    'patient_id' => $patientId,
-                    'scheduled_at' => $arrivedAt->copy()->startOfHour()->toDateTimeString(),
-                    'reason' => 'Consultation',
-                    'status' => 'checked_in',
-                    'created_at' => $arrivedAt->toDateTimeString(),
-                    'updated_at' => $arrivedAt->toDateTimeString(),
-                ];
-            }
-
-            if ($calledAt->greaterThan($cutoff)) {
-                $entries[] = $this->entryRow($date, $index + 1, $patientId, $isAppointment, 'skipped', $arrivedAt, null, null, null, $appointmentKey, $now);
-
-                continue;
-            }
-
-            $completedAt = $calledAt->copy()->addMinutes($this->consultMinutes());
-            $serverFreeAt[$server] = $completedAt->getTimestamp();
-            $handledBy = $staff[$server % count($staff)];
-
-            $entries[] = $this->entryRow($date, $index + 1, $patientId, $isAppointment, 'done', $arrivedAt, $calledAt, $completedAt, $handledBy, $appointmentKey, $now);
-
-            if ($this->chance(self::VISIT_RECORD_SHARE)) {
-                $visits[] = [
-                    'entry_index' => count($entries) - 1,
-                    'patient_id' => $patientId,
-                    'created_by_id' => $handledBy,
-                    'created_at' => $completedAt->toDateTimeString(),
-                    'updated_at' => $completedAt->toDateTimeString(),
-                ];
-            }
-        }
-
-        return [
-            'entries' => $entries,
-            'appointments' => array_merge($appointments, $this->noShowAppointments($date, $patients)),
-            'visits' => $visits,
-        ];
-    }
-
-    /**
-     * `appointment_key` is a placeholder resolved to a real appointment id
-     * once the appointment rows have been inserted.
-     *
-     * @return array<string, mixed>
-     */
-    private function entryRow(
-        Carbon $date,
-        int $queueNumber,
-        int $patientId,
-        bool $isAppointment,
-        string $status,
-        Carbon $arrivedAt,
-        ?Carbon $calledAt,
-        ?Carbon $completedAt,
-        ?int $handledBy,
-        ?int $appointmentKey,
-        Carbon $now,
-    ): array {
-        return [
-            'queue_number' => $queueNumber,
-            'queue_date' => $date->toDateString(),
-            'patient_id' => $patientId,
-            'source' => $isAppointment ? 'appointment' : 'walk_in',
-            'status' => $status,
-            'appointment_key' => $appointmentKey,
-            'handled_by_id' => $handledBy,
-            'joined_at' => $arrivedAt->toDateTimeString(),
-            'called_at' => $calledAt?->toDateTimeString(),
-            'completed_at' => $completedAt?->toDateTimeString(),
-            'created_at' => $now->toDateTimeString(),
-            'updated_at' => $now->toDateTimeString(),
-        ];
-    }
-
-    /**
-     * Booked appointments nobody turned up for. They never enter the queue,
-     * so they feed the no-show report rather than the wait-time model.
-     *
-     * @param  array<int, int>  $patients
-     * @return array<int, array<string, mixed>>
-     */
-    private function noShowAppointments(Carbon $date, array $patients): array
-    {
-        $rows = [];
-        $count = $this->poisson(self::NO_SHOW_SHARE * 4);
-
-        for ($i = 0; $i < $count; $i++) {
-            $scheduledAt = $date->copy()->setTime(9 + ($i % 7), 0);
-
-            $rows[] = [
-                'patient_id' => $patients[mt_rand(0, count($patients) - 1)],
-                'scheduled_at' => $scheduledAt->toDateTimeString(),
-                'reason' => 'Consultation',
-                'status' => 'no_show',
-                'created_at' => $scheduledAt->toDateTimeString(),
-                'updated_at' => $scheduledAt->toDateTimeString(),
-            ];
-        }
-
-        return $rows;
-    }
-
-    /**
-     * Poisson arrival counts per opening hour, spread uniformly at random
+     * Poisson walk-in counts per opening hour, spread uniformly at random
      * within each hour and returned in chronological order.
      *
      * @return array<int, Carbon>
@@ -593,6 +800,24 @@ class DemoHistorySeeder extends Seeder
         usort($times, static fn (Carbon $a, Carbon $b): int => $a->getTimestamp() <=> $b->getTimestamp());
 
         return $times;
+    }
+
+    /**
+     * @param  array<string, float>  $shares  outcome => share, summing to 1
+     */
+    private function pickOutcome(array $shares): string
+    {
+        $roll = mt_rand() / mt_getrandmax();
+
+        foreach ($shares as $outcome => $share) {
+            $roll -= $share;
+
+            if ($roll <= 0) {
+                return $outcome;
+            }
+        }
+
+        return array_key_last($shares);
     }
 
     /**
@@ -638,42 +863,6 @@ class DemoHistorySeeder extends Seeder
         return sqrt(-2 * log($u1)) * cos(2 * M_PI * $u2);
     }
 
-    private function chance(float $probability): bool
-    {
-        return (mt_rand() / mt_getrandmax()) < $probability;
-    }
-
-    /**
-     * @param  array<int, int>  $patients
-     * @return array<int, int>
-     */
-    private function pickPatients(array $patients, int $count): array
-    {
-        $picked = [];
-        $total = count($patients);
-
-        for ($i = 0; $i < $count; $i++) {
-            $picked[] = $patients[mt_rand(0, $total - 1)];
-        }
-
-        return $picked;
-    }
-
-    /**
-     * A small fixed vocabulary rather than random sentences, so the
-     * diagnosis columns look like a clinic's own shorthand and the reports
-     * that bucket them have something coherent to bucket.
-     */
-    private function complaint(): string
-    {
-        return self::COMPLAINTS[mt_rand(0, count(self::COMPLAINTS) - 1)];
-    }
-
-    private function diagnosis(): string
-    {
-        return self::DIAGNOSES[mt_rand(0, count(self::DIAGNOSES) - 1)];
-    }
-
     /**
      * Roll each generated day into the hourly analytics panel using the
      * production command, so the volume model trains on exactly the rows a
@@ -681,16 +870,13 @@ class DemoHistorySeeder extends Seeder
      */
     private function snapshot(Carbon $start): void
     {
-        $cursor = $start->copy();
         $days = 0;
 
-        while ($cursor->lessThan(Carbon::today())) {
+        for ($cursor = $start->copy(); $cursor->lessThan(Carbon::today()); $cursor->addDay()) {
             if (isset(self::WEEKDAY_BASE_ARRIVALS[$cursor->dayOfWeek])) {
                 Artisan::call('analytics:snapshot', ['date' => $cursor->toDateString()]);
                 $days++;
             }
-
-            $cursor->addDay();
         }
 
         $this->command?->info("Snapshotted {$days} day(s) into analytics_snapshots.");

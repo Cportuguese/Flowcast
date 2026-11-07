@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { LogoMark } from '../components/Logo'
 import { api } from '../lib/api'
 import { formatClock, todayIso } from '../lib/dates'
 import { getEcho } from '../lib/echo'
@@ -79,12 +80,23 @@ export function TvBoard() {
     })
   }, [])
 
-  // Re-check opening hours every few minutes so the board flips to "closed"
-  // on its own after the last patient without anyone touching it.
+  // Re-check every minute: the board flips to "closed" on its own after the
+  // last patient, and "Up next" reorders when a booked patient's time comes
+  // (no one presses anything at that moment, so no update is broadcast).
   useEffect(() => {
     const id = setInterval(() => {
-      api.get<{ hours: BoardHours }>('/queue-board/today').then((r) => setHours(r.data.hours)).catch(() => {})
-    }, 5 * 60_000)
+      api
+        .get<{ entries: BoardEntry[]; hours: BoardHours }>('/queue-board/today')
+        .then((r) => {
+          setEntries(r.data.entries)
+          setHours(r.data.hours)
+          // Catch up on a call the socket missed (a dropped connection);
+          // with nobody in consultation, the last number called stays up.
+          const inConsultation = r.data.entries.filter((e) => e.status === 'in_consultation')
+          if (inConsultation.length > 0) setNowServing(inConsultation[inConsultation.length - 1].queue_number)
+        })
+        .catch(() => {})
+    }, 60_000)
     return () => clearInterval(id)
   }, [])
 
@@ -126,7 +138,10 @@ export function TvBoard() {
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 px-8 py-8 text-white">
       <header className="flex items-center justify-between">
-        <p className="text-lg uppercase tracking-[0.3em] text-slate-400">UDD Clinic</p>
+        <div className="flex items-center gap-4">
+          <LogoMark tone="white" className="h-10 w-10" />
+          <p className="text-lg uppercase tracking-[0.3em] text-slate-400">UDD Clinic</p>
+        </div>
         <div className="flex items-center gap-6 text-slate-400">
           <p className="text-2xl tabular-nums">
             {now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
@@ -152,21 +167,22 @@ export function TvBoard() {
         <div className="flex flex-1 flex-col items-center">
           <div className="mt-10 flex flex-col items-center">
             <p className="text-2xl uppercase tracking-widest text-slate-400">Now Serving</p>
-            <p className="mt-4 text-[12rem] font-bold leading-none text-blue-400">
-              {nowServing !== null ? `#${nowServing}` : '—'}
-            </p>
+            {nowServing !== null ? (
+              <p className="mt-4 text-[12rem] font-bold leading-none text-blue-400">#{nowServing}</p>
+            ) : (
+              // At 12rem a dash reads as a stray bar across the screen.
+              <p className="mt-12 text-4xl font-semibold text-slate-500">Please wait to be called</p>
+            )}
           </div>
 
           <div className="mt-16 w-full max-w-3xl">
             <p className="text-center text-lg uppercase tracking-widest text-slate-400">Up Next</p>
-            <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-5">
-              {upcoming.length === 0 && (
-                <p className="col-span-full text-center text-slate-500">No one else waiting</p>
-              )}
+            <div className="mt-4 flex flex-wrap justify-center gap-4">
+              {upcoming.length === 0 && <p className="w-full text-center text-slate-500">No one else waiting</p>}
               {upcoming.map((entry) => (
                 <div
                   key={entry.queue_number}
-                  className="rounded-2xl border border-slate-800 bg-slate-900 py-6 text-center text-4xl font-semibold"
+                  className="w-32 rounded-2xl border border-slate-800 bg-slate-900 py-6 text-center text-4xl font-semibold"
                 >
                   {entry.queue_number}
                 </div>

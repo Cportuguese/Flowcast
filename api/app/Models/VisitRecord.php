@@ -9,8 +9,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
+/**
+ * What happened at one clinic visit. A visit comes from exactly one of a
+ * queue entry (walk-ins and the nurse's bookings) or an appointment (the
+ * dentist's and the school physician's patients, seen at their booked time).
+ */
 #[Fillable([
     'queue_entry_id',
+    'appointment_id',
     'patient_id',
     'created_by_id',
     'complaint',
@@ -18,8 +24,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'temperature',
     'pulse',
     'resp_rate',
-    'diagnosis',
-    'treatment',
+    'intervention',
+    'remarks',
     'referred_to',
 ])]
 class VisitRecord extends Model
@@ -46,6 +52,11 @@ class VisitRecord extends Model
     public function queueEntry(): BelongsTo
     {
         return $this->belongsTo(QueueEntry::class);
+    }
+
+    public function appointment(): BelongsTo
+    {
+        return $this->belongsTo(Appointment::class);
     }
 
     /**

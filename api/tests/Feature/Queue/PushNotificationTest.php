@@ -20,7 +20,7 @@ class PushNotificationTest extends TestCase
     {
         Http::fake(['exp.host/*' => Http::response(['data' => ['status' => 'ok']])]);
         $this->waiting(1, self::TOKEN);
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $this->postJson('/api/admin/queue/call-next')->assertOk();
 
@@ -38,7 +38,7 @@ class PushNotificationTest extends TestCase
         Http::fake(['exp.host/*' => Http::response(['data' => ['status' => 'ok']])]);
         $this->waiting(1);
         $this->waiting(2, self::TOKEN);
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $this->postJson('/api/admin/queue/call-next')->assertOk();
 
@@ -53,7 +53,7 @@ class PushNotificationTest extends TestCase
     public function test_push_tokens_never_appear_in_queue_payloads(): void
     {
         $this->waiting(1, self::TOKEN);
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $this->assertStringNotContainsString(self::TOKEN, $this->getJson('/api/queue/today')->assertOk()->getContent());
         $this->assertStringNotContainsString(self::TOKEN, $this->getJson('/api/queue-board/today')->assertOk()->getContent());
@@ -69,7 +69,7 @@ class PushNotificationTest extends TestCase
     {
         Http::fake(['exp.host/*' => Http::failedConnection()]);
         $entry = $this->waiting(1, self::TOKEN);
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $this->postJson('/api/admin/queue/call-next')
             ->assertOk()
@@ -94,7 +94,7 @@ class PushNotificationTest extends TestCase
 
         $first = $this->waiting(1);
         $this->waiting(2, self::TOKEN);
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $this->postJson('/api/admin/queue/call-next')->assertOk();
         $this->patchJson("/api/admin/queue/{$first->id}/complete")->assertOk();

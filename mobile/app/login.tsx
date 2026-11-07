@@ -6,10 +6,9 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  Text,
-  TextInput,
   View,
 } from 'react-native';
+import { Text, TextInput } from '../components/Text';
 import { AuthHeader } from '../components/AuthHeader';
 import { useAuth } from '../context/AuthContext';
 import { extractErrorMessage } from '../lib/errors';

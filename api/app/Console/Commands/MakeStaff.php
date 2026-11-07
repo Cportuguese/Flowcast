@@ -23,6 +23,7 @@ class MakeStaff extends Command
         {email : Login email for the new account}
         {--name= : Display name (defaults to the part before the @)}
         {--role=personnel : admin or personnel}
+        {--profession= : nurse, dentist or physician — makes the account bookable}
         {--password= : Password (a random one is generated and printed if omitted)}';
 
     protected $description = 'Create an admin or personnel account';
@@ -33,6 +34,7 @@ class MakeStaff extends Command
             'email' => $this->argument('email'),
             'name' => $this->option('name') ?: Str::before($this->argument('email'), '@'),
             'role' => $this->option('role'),
+            'profession' => $this->option('profession'),
             'password' => $this->option('password') ?: Str::password(16),
         ];
 
@@ -40,6 +42,7 @@ class MakeStaff extends Command
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'name' => ['required', 'string', 'max:255'],
             'role' => ['required', Rule::in(['admin', 'personnel'])],
+            'profession' => ['nullable', Rule::in(array_keys(User::PROFESSION_TITLES))],
             'password' => ['required', Password::defaults()],
         ]);
 
@@ -57,6 +60,9 @@ class MakeStaff extends Command
             'password' => Hash::make($input['password']),
         ]);
         $user->role = $input['role'];
+        // Like role, profession is never mass-assignable: it decides who can
+        // be booked and whose name signs a certificate.
+        $user->profession = $input['profession'];
         $user->save();
 
         // No request user on the CLI, so the actor is null; the row itself
@@ -64,6 +70,7 @@ class MakeStaff extends Command
         app(AuditLogger::class)->log(null, 'staff.created', $user, [
             'email' => $user->email,
             'role' => $user->role,
+            'profession' => $user->profession,
         ]);
 
         $this->info("Created {$user->role} account for {$user->email} (id {$user->id}).");

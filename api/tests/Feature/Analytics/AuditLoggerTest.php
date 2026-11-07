@@ -2,14 +2,16 @@
 
 namespace Tests\Feature\Analytics;
 
+use App\Mail\BookingCode;
 use App\Models\Appointment;
 use App\Models\AuditLog;
-use App\Models\ClinicSchedule;
+use App\Models\ProviderSchedule;
 use App\Models\QueueEntry;
 use App\Models\User;
 use App\Services\AuditLogger;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Mail;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -39,32 +41,39 @@ class AuditLoggerTest extends TestCase
         $this->assertSame(['status' => 'done'], AuditLog::latest()->first()->changes);
     }
 
-    public function test_booking_an_appointment_is_logged(): void
+    public function test_requesting_a_booking_is_logged(): void
     {
+        Mail::fake();
         Carbon::setTestNow(Carbon::parse('2026-09-14 08:00:00'));
         $scheduleDate = today()->addDay();
 
-        ClinicSchedule::factory()->create([
-            'day_of_week' => $scheduleDate->dayOfWeek,
-            'start_time' => '08:00',
-            'end_time' => '17:00',
-            'slot_minutes' => 30,
-            'capacity' => 2,
-            'is_active' => true,
-        ]);
+        $dentist = User::factory()->dentist()->create();
+        ProviderSchedule::factory()->for($dentist)->create(['day_of_week' => $scheduleDate->dayOfWeek]);
 
         $patient = User::factory()->patient()->create();
         Sanctum::actingAs($patient);
 
-        $this->postJson('/api/appointments', [
+        $booking = [
+            'provider_id' => $dentist->id,
             'date' => $scheduleDate->toDateString(),
             'time' => '09:00',
             'reason' => 'Checkup',
-        ])->assertCreated();
+        ];
+
+        $this->postJson('/api/appointments/otp', $booking)->assertOk();
+
+        $code = null;
+        Mail::assertSent(BookingCode::class, function (BookingCode $mail) use (&$code) {
+            $code = $mail->code;
+
+            return true;
+        });
+
+        $this->postJson('/api/appointments', [...$booking, 'code' => $code])->assertCreated();
 
         $this->assertDatabaseHas('audit_logs', [
             'user_id' => $patient->id,
-            'action' => 'appointment.booked',
+            'action' => 'appointment.requested',
             'model_type' => 'Appointment',
         ]);
     }
@@ -87,8 +96,8 @@ class AuditLoggerTest extends TestCase
 
     public function test_marking_a_no_show_is_logged(): void
     {
-        $appointment = Appointment::factory()->create();
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        $appointment = Appointment::factory()->create(['scheduled_at' => now()->subHour()]);
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $this->patchJson("/api/appointments/{$appointment->id}/no-show")->assertOk();
 
@@ -101,16 +110,16 @@ class AuditLoggerTest extends TestCase
 
     public function test_walk_in_check_in_is_logged(): void
     {
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
-        $this->postJson('/api/admin/queue/walk-in', ['name' => 'Walk In'])->assertCreated();
+        $this->postJson('/api/admin/queue/walk-in', ['first_name' => 'Walk', 'last_name' => 'In', 'department' => 'ADMIN'])->assertCreated();
 
         $this->assertDatabaseHas('audit_logs', ['action' => 'queue.walk_in', 'model_type' => 'QueueEntry']);
     }
 
     public function test_calling_completing_and_skipping_a_queue_entry_are_logged(): void
     {
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $waiting = QueueEntry::factory()->create(['status' => 'waiting', 'queue_date' => today()]);
         $this->postJson('/api/admin/queue/call-next')->assertOk();
@@ -127,12 +136,12 @@ class AuditLoggerTest extends TestCase
     public function test_creating_a_visit_record_is_logged(): void
     {
         $entry = QueueEntry::factory()->create();
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $this->postJson('/api/visits', [
             'queue_entry_id' => $entry->id,
             'complaint' => 'Headache',
-            'diagnosis' => 'Tension headache',
+            'intervention' => 'Paracetamol 500 mg given; rested in the clinic.',
         ])->assertCreated();
 
         $this->assertDatabaseHas('audit_logs', ['action' => 'visit.created', 'model_type' => 'VisitRecord']);

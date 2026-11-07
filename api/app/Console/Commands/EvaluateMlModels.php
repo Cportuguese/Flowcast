@@ -52,7 +52,12 @@ class EvaluateMlModels extends Command
         $active = MlModel::active($key);
 
         if (! $active) {
-            $this->warn("[{$key}] No active model — the heuristic is serving. Run `php artisan ml:train {$key}` once there is history.");
+            $latest = MlModel::where('key', $key)->orderByDesc('version')->first();
+
+            $latest
+                ? $this->warn("[{$key}] No active model — the heuristic is serving. The latest fit (version {$latest->version}, holdout MAE {$latest->metrics['mae']}) "
+                    ."did not clearly beat the heuristic's {$latest->metrics['baseline_mae']} (by more than twice the noise in the comparison), and a model only serves when it does.")
+                : $this->warn("[{$key}] No active model — the heuristic is serving. Run `php artisan ml:train {$key}` once there is history.");
 
             return;
         }

@@ -28,12 +28,10 @@ Access is enforced in two layers that agree with each other:
 | Clinic Settings *(admin only)* | Weekly hours per-day Save, Flag event day, Remove event day | `POST /admin/schedules`, `POST/DELETE /admin/event-days` |
 | Reports *(admin only)* | Run (×4 reports), Download CSV, Print / Export PDF | `GET /admin/reports/*` |
 | Audit Log *(admin only)* | Filter + Search (read-only) | `GET /admin/audit-logs` |
-| Inventory | Low-stock / expiring banners, Stock in, Stock out, expand row for batches, **Add/Edit/Archive medicine, Dispose expired, History** | `GET /medicines`, `POST /inventory/stock-in`, `POST /inventory/stock-out`, `GET /inventory/expiring-soon`, `POST/PATCH /admin/medicines`, `GET /admin/inventory/expired`, `POST /admin/inventory/batches/{id}/dispose` |
-| Inventory History *(admin only)* | Filter by date/medicine/type, Download CSV | `GET /admin/inventory/history` |
-| Queue History *(admin only)* | Date picker, per-day stats (total / completed / skipped / avg wait), read-only table with wait + consult minutes | `GET /queue/{date}/history` |
+| API-only, no UI yet | Queue history by date | `GET /queue/{date}/history` (admin only) |
 
 ### PERSONNEL (web) — ✅ confirmed
-Everything in the Admin table **except** Clinic Settings, Reports, Audit Log, queue history, medicine catalog edits, expired-batch disposal, and Inventory History. Personnel can: Call Next, Register walk-in, Mark Done, Mark Skipped, Save visit record (incl. medicines given, which deducts stock), Mark No-show, search Visit Records, view Analytics, open TV Board, view Inventory, Stock in, Stock out.
+Everything in the Admin table **except** Clinic Settings, Reports, Audit Log, and queue history. Personnel can: Call Next, Register walk-in, Mark Done, Mark Skipped, Save visit record, Mark No-show, search Visit Records, view Analytics, open TV Board.
 
 > Note: routes under `/admin/queue/*` and `/admin/visits/search` are personnel-accessible despite the prefix ([api.php:71-88](api/routes/api.php#L71-L88)). Naming only — behaviour is correct.
 
@@ -46,20 +44,20 @@ Everything in the Admin table **except** Clinic Settings, Reports, Audit Log, qu
 | Visit History / Detail | Tap visit → detail (read-only), Close | `GET /visits/mine`, `GET /visits/{queueEntry}` |
 | Login / Register | Sign in, Create Account | `POST /login`, `POST /register` |
 
-Patient on **web**: `/dashboard` shows a "Flowcast for patients lives in the mobile app" card ([PatientWebNotice.tsx](web/src/components/PatientWebNotice.tsx)); staff routes show an access-denied card.
+Patient on **web**: reaches `/dashboard` and sees only "Welcome … Log out" ([Dashboard.tsx:33](web/src/pages/Dashboard.tsx#L33)). All other routes redirect to `/dashboard`.
 
 ### TV BOARD (public, no login) — ✅ confirmed
 [TvBoard.tsx](web/src/pages/TvBoard.tsx): **zero buttons**. Shows "Now Serving #N" and "Up Next" (10 numbers). Live via public channel `queue-board.{date}`, chime on `ticket.called`. Data is numbers + status only (no names) — correct for a public screen.
 
 ### Not in the system (but referenced in memory)
-- ~~Medical certificate generation~~ — implemented Sep 20, 2026: `POST /visits/{visit}/certificate` (personnel only), `GET …/certificate` + `…/download` (staff any, patient own). Server-rendered PDF ([medical.blade.php](api/resources/views/certificates/medical.blade.php)), one per visit, numbered `MC-YYYY-NNNN`. UI: [CertificatePanel.tsx](web/src/components/CertificatePanel.tsx) in the visit form (post-save step) and Visit Records rows; "Download certificate" on mobile [visit-detail.tsx](mobile/app/visit-detail.tsx).
+- **Medical certificate generation** — no endpoint, no button anywhere (`grep certificat` → 0 hits). Deferred at Phase 4. Intended rule (from project memory): personnel generate; admin view/download only. Included below as *planned* placeholders, clearly marked.
 
-### Gaps found during confirmation — all resolved (Sep 20, 2026)
-1. ~~Web has no shared shell~~ → [AppShell.tsx](web/src/components/AppShell.tsx) + [PageHeader.tsx](web/src/components/PageHeader.tsx); routes nested in [App.tsx](web/src/App.tsx).
-2. ~~Patient on web / staff on mobile see empty or placeholder pages~~ → [PatientWebNotice.tsx](web/src/components/PatientWebNotice.tsx) and the staff notice in [mobile/app/index.tsx](mobile/app/index.tsx).
-3. ~~Mobile Register never sends `patient_type` / `contact_no`~~ → optional "I am a" chips + Contact Number in [register.tsx](mobile/app/register.tsx).
-4. ~~Admin has no UI for queue history~~ → [QueueHistory.tsx](web/src/pages/QueueHistory.tsx) at `/admin/queue-history`.
-5. ~~`ProtectedRoute` redirects silently on wrong role~~ → renders an access-denied card with a link home ([ProtectedRoute.tsx](web/src/components/ProtectedRoute.tsx)).
+### Gaps found during confirmation
+1. Web has **no shared shell** — 8 pages each duplicate header/Back/Log out.
+2. Patient on web → empty page; staff on mobile → placeholder ([mobile/app/index.tsx](mobile/app/index.tsx)). Both need a friendly "wrong app" page.
+3. Mobile Register never sends `patient_type` / `contact_no` although the API accepts them — patient profile is incomplete, which hurts walk-in matching and certificates later.
+4. Admin has no UI for `GET /queue/{date}/history`.
+5. `ProtectedRoute` redirects silently on wrong role — no "not allowed" message.
 
 ---
 
@@ -67,20 +65,22 @@ Patient on **web**: `/dashboard` shows a "Flowcast for patients lives in the mob
 
 Derived entirely from what exists; **no new colors**.
 
+> **Source of truth (2026-11-07):** the working rules now live in the Claude skill [.claude/skills/flowcast-ui/SKILL.md](../.claude/skills/flowcast-ui/SKILL.md). The locked logo lives in [brand/](../brand/README.md). This table is kept for reference.
+
 | Token | Value | Source |
 |---|---|---|
-| `brand` | `#0b1636` navy → `bg-brand` / `border-brand` | web [index.css](web/src/index.css) `@theme`; mobile [tailwind.config.js](mobile/tailwind.config.js) |
-| `accent` | `blue-600` (buttons) / `CHART_COLORS.actual` (charts) | [Button.tsx](web/src/components/Button.tsx), [lib/theme.ts](web/src/lib/theme.ts) |
+| `brand` | `#0b1636` navy | [AuthLayout.tsx:7](web/src/layouts/AuthLayout.tsx#L7), mobile primary buttons |
+| `accent` | `blue-600` / `#2a78d6` | primary buttons, chart "actual" line |
 | `surface` | white cards on `gray-50` page | all pages |
 | `border` | `slate-200` | all pages |
 | `text` / `muted` | `slate-900` / `slate-500` | all pages |
-| status tones: neutral / info / success / warning / danger / muted | `slate-100` / `blue-100` / `green-100` / `amber-100` / `red-100` / `gray-100` | [StatusPill.tsx](web/src/components/StatusPill.tsx); queue map in [lib/queue.ts](web/src/lib/queue.ts) |
-| Font | system-ui stack | [index.css:4](web/src/index.css#L4) |
+| status: waiting / in_consultation / done / skipped·no_show | `slate-100` / `blue-100` / `green-100` / `red-100` | [QueueBoard.tsx:21-26](web/src/pages/QueueBoard.tsx#L21-L26) |
+| Font | Atkinson Hyperlegible Next (bundled; PDF keeps DejaVu Sans) | [index.css](web/src/index.css), [mobile/components/Text.tsx](mobile/components/Text.tsx) |
 | Radius / shadow | `rounded-lg`, `shadow-sm` | all cards |
 
 Minimalist rules: one primary (navy or blue-600) button per view; everything else is outline or text; no icons-only buttons without labels; max 4–5 stat tiles; no decorative gradients; whitespace over borders.
 
-Reusable pieces — all extracted (Sep 20, 2026): [AppShell](web/src/components/AppShell.tsx), [PageHeader](web/src/components/PageHeader.tsx), [StatTile](web/src/components/StatTile.tsx), [StatusPill](web/src/components/StatusPill.tsx) (`tone` prop), [Button](web/src/components/Button.tsx) (`variant` primary/outline/danger/ghost; `buttonClass` for `<Link>`/`<a>`). New UI should use these rather than inline class strings.
+Reusable pieces to extract when implementing (currently copy-pasted): `AppShell` (sidebar + content), `PageHeader` (title + date + actions slot), `StatTile` (already local in [AnalyticsDashboard.tsx:319](web/src/pages/AnalyticsDashboard.tsx#L319)), `StatusPill`, `Button` (primary/outline/danger/ghost).
 
 ---
 
@@ -119,13 +119,10 @@ Sidebar visibility per role:
 | Live Queue | ✅ | ✅ | — |
 | Appointments | ✅ | ✅ | — |
 | Visit Records | ✅ | ✅ | — |
-| Inventory | ✅ | ✅ | — |
 | Analytics | ✅ | ✅ *(keep as today; flag if you want it admin-only)* | — |
 | TV Board ↗ (new tab) | ✅ | ✅ | — |
 | Clinic Settings | ✅ | ✗ | — |
 | Reports | ✅ | ✗ | — |
-| Queue History | ✅ | ✗ | — |
-| Inventory History | ✅ | ✗ | — |
 | Audit Log | ✅ | ✗ | — |
 | Log out | ✅ | ✅ | ✅ |
 
@@ -159,7 +156,7 @@ Buttons visible: **Call Next** (primary), Register walk-in (outline), Mark Done 
 
 Data sources already exist: `GET /queue/today`, `GET /appointments?date=today`, `GET /analytics/dashboard` (for avg wait), channel `queue.{date}.staff`.
 
-✅ After Save record, the Visit Form modal shows a **Generate medical certificate** step (rest days + remarks) — personnel only; admin closes straight away.
+*Planned (not in system):* after Save record, the Visit Form modal gets a **Generate ""MEDICAL"" certificate** button — personnel only.
 
 ### 3.3 ADMIN — Home ("Overview")
 
@@ -190,9 +187,9 @@ Buttons visible: everything Personnel has (via sidebar) **plus** Clinic Settings
 
 Data sources: `GET /analytics/dashboard`, `GET /analytics/volume-forecast?days=7`, `GET /admin/reports/no-show-summary?month`, `GET /admin/schedules`, `GET /admin/event-days`, `GET /admin/audit-logs` (limit to last 5).
 
-✅ Certificates appear in Visit Records rows as **Download PDF** for anyone; the issue form shows for personnel only — admin never sees "Generate".
+*Planned (not in system):* certificates appear in Visit Records rows as **View / Download** only — admin never sees "Generate".
 
-### 3.4 PATIENT — Mobile home ([(tabs)/index.tsx](mobile/app/(tabs)/index.tsx)) — ✅ implemented Sep 20, 2026
+### 3.4 PATIENT — Mobile home (redesign of [queue.tsx](mobile/app/queue.tsx))
 
 Move from Stack-with-pseudo-tabs to a **3-tab bottom bar** (Expo Router `(tabs)` group): **Home · Appointments · Visits**. Existing screens map 1:1; `book-appointment` and `visit-detail` stay as stack pushes. "Log out" moves to a small header avatar menu / settings row instead of a floating text link.
 
@@ -234,13 +231,13 @@ Move from Stack-with-pseudo-tabs to a **3-tab bottom bar** (Expo Router `(tabs)`
 Buttons per tab:
 - **Home**: Check in as walk-in, Check in for my appointment (conditional), Back to check-in (conditional), Book an appointment →, ⚙ (Log out inside).
 - **Appointments**: Book a new appointment (primary), Cancel appointment (row, booked/checked_in only).
-- **Visits**: tap row → detail (read-only). ✅ **Download certificate** on visit detail when one exists (downloads with the bearer token, then opens the OS share sheet).
+- **Visits**: tap row → detail (read-only). *Planned:* **Download certificate** on visit detail once certificates exist.
 
 Fix while redesigning: send `patient_type` + `contact_no` from Register (gap #3).
 
 Patient on **web**: replace empty `/dashboard` with a single centered card — logo, "Flowcast for patients lives in the mobile app", Log out. Same card, mirrored, for staff on mobile ([index.tsx](mobile/app/index.tsx)): "Staff tools are on the web dashboard".
 
-### 3.5 TV BOARD — public — ✅ implemented Sep 20, 2026
+### 3.5 TV BOARD — public
 
 No buttons — confirmed and kept. Refinements only:
 
@@ -278,22 +275,21 @@ Additions: clock, live/offline dot (Echo connection state), closed state. Never 
 | Weekly hours Save / Event day Flag / Remove | ✅ | ✗ | ✗ | ✗ |
 | Run report / Download CSV / Print | ✅ | ✗ | ✗ | ✗ |
 | Audit log Search | ✅ | ✗ | ✗ | ✗ |
-| Queue history by date | ✅ | ✗ | ✗ | ✗ |
+| Queue history by date | ✅ *(UI to add)* | ✗ | ✗ | ✗ |
 | Check in (walk-in / appointment) | ✗ | ✗ | ✅ | ✗ |
 | Book / Cancel appointment | ✗ | ✗ | ✅ | ✗ |
 | View own visit history | ✗ | ✗ | ✅ | ✗ |
 | Log out | ✅ | ✅ | ✅ | ✗ |
-| Generate medical certificate | ✗ | ✅ | ✗ | ✗ |
-| View / Download certificate | ✅ | ✅ | ✅ own | ✗ |
-| Change own password | ✅ | ✅ | ✅ | ✗ |
+| *Generate certificate (planned)* | ✗ | ✅ | ✗ | ✗ |
+| *View / Download certificate (planned)* | ✅ | ✅ | ✅ own | ✗ |
 
-All rows are **enforced at both API and UI layers** (certificates and password change added Sep 20, 2026). Password change lives at web `/account` (sidebar footer) and the mobile Home account menu; it revokes every other session.
+All ✅/✗ in the non-italic rows are **already enforced today** at both API and UI layers. Italic rows do not exist yet.
 
 ---
 
 ## Part 5 — Open decisions for you (not blocking the spec)
 
-1. Should **Analytics** stay visible to Personnel, or become admin-only? Today: both roles. Spec keeps it.
+1. Should **Analytics** stay visible to Personnel, or become admin-only? Today: both roles. Spec keeps it. my answer: I think only admin 
 2. Mobile bottom tabs vs keeping the current stack + two buttons — spec recommends tabs.
 3. Whether admin should be able to **Call Next** from their Home, or only from Live Queue — spec says Live Queue only (keeps admin home read-mostly).
 
@@ -301,12 +297,12 @@ All rows are **enforced at both API and UI layers** (certificates and password c
 
 ## Implementation order (for a future session — NOT this one)
 
-1. ~~`AppShell` + `PageHeader` + `StatTile` + `StatusPill` + `Button`~~ — all done (Part 2 complete).
-2. ~~Split `Dashboard.tsx` into role-switched homes~~ — done: [PersonnelHome.tsx](web/src/pages/home/PersonnelHome.tsx), [AdminHome.tsx](web/src/pages/home/AdminHome.tsx), shared [useTodayQueue.ts](web/src/lib/useTodayQueue.ts) + [StatTile.tsx](web/src/components/StatTile.tsx). "Register walk-in" on Home opens `/queue?walkin=1`.
-3. ~~Small `QueueHistory` page for admin~~ — done with the Part 1 gap fixes.
-4. ~~Mobile tabs + patient home~~ — done: [(tabs)/_layout.tsx](mobile/app/(tabs)/_layout.tsx), [(tabs)/index.tsx](mobile/app/(tabs)/index.tsx) (states A–D, "Now serving" from the public board channel), Log out behind the account icon, [ScreenHeader.tsx](mobile/components/ScreenHeader.tsx). Register fields were done with the Part 1 gaps.
-5. ~~TV board: clock, connection dot, closed state~~ — done: [TvBoard.tsx](web/src/pages/TvBoard.tsx); `GET /queue-board/today` now returns an `hours` block (is_open / today / next_opening) so the public board can show "Clinic closed · Opens Monday at 8:00 AM".
-6. ~~Certificates~~ — done (API commit 0a0f3ca + UI).
+1. `web/src/components/AppShell.tsx` + `PageHeader`, `StatTile`, `StatusPill`, `Button` → wrap existing pages, delete per-page Back/Log out.
+2. Split `Dashboard.tsx` into `StaffHome` (role-switched Personnel/Admin layout) + `PatientWebNotice`.
+3. Small `QueueHistory` page for admin (`GET /queue/{date}/history`).
+4. Mobile: `app/(tabs)/` group with `index` (home), `appointments`, `visits`; move Log out to header; send `patient_type`/`contact_no` on register.
+5. TV board: clock, connection dot, closed state.
+6. Certificates: separate phase (API first), then the three planned buttons.
 
 ## Verification (for this session)
 

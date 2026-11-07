@@ -151,6 +151,11 @@ class VolumePredictor
             return null;
         }
 
+        // Fitted on an older feature list: unusable until `ml:train` runs.
+        if ($model->feature_names !== VolumeFeatures::FEATURE_NAMES) {
+            return null;
+        }
+
         return $model;
     }
 

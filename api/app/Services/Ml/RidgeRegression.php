@@ -20,9 +20,9 @@ use InvalidArgumentException;
  *    intercept is never shrunk toward zero by the penalty.
  *
  * The lambda I term also guarantees the inverse exists for lambda > 0 even
- * when two features are perfectly collinear, which is the practical reason
- * to prefer ridge over plain OLS on a feature set with built-in interactions
- * such as people_ahead and people_ahead_per_staff.
+ * when features are perfectly collinear, which is the practical reason to
+ * prefer ridge over plain OLS here: the clinic is closed on Sundays, so the
+ * six weekday dummies always add up to one and duplicate the intercept.
  */
 class RidgeRegression
 {

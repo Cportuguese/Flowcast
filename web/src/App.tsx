@@ -1,33 +1,39 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
-import { PageLoading } from './components/PageLoading'
 import { ProtectedRoute } from './components/ProtectedRoute'
-import { Account } from './pages/Account'
-import { AdminSettings } from './pages/AdminSettings'
-import { Appointments } from './pages/Appointments'
-import { AuditLog } from './pages/AuditLog'
 import { Dashboard } from './pages/Dashboard'
-import { Inventory } from './pages/Inventory'
-import { InventoryHistory } from './pages/InventoryHistory'
 import { Login } from './pages/Login'
-import { QueueBoard } from './pages/QueueBoard'
-import { QueueHistory } from './pages/QueueHistory'
-import { Reports } from './pages/Reports'
-import { TvBoard } from './pages/TvBoard'
-import { VisitsSearch } from './pages/VisitsSearch'
 
-// The only page besides AdminHome that needs recharts — split it so the
-// nurse's first load (queue, appointments, visits) doesn't pay for charts.
-const AnalyticsDashboard = lazy(() =>
-  import('./pages/AnalyticsDashboard').then((m) => ({ default: m.AnalyticsDashboard })),
-)
+// Sign-in and each role's home load with the app; every other page is
+// fetched the first time it is opened (AppShell shows "Loading…" beside the
+// sidebar meanwhile), so the first screen is not held up by pages — and
+// recharts, which only Analytics needs — that most visits never reach.
+const Account = lazy(() => import('./pages/Account').then((m) => ({ default: m.Account })))
+const AdminSettings = lazy(() => import('./pages/AdminSettings').then((m) => ({ default: m.AdminSettings })))
+const AnalyticsDashboard = lazy(() => import('./pages/AnalyticsDashboard').then((m) => ({ default: m.AnalyticsDashboard })))
+const Appointments = lazy(() => import('./pages/Appointments').then((m) => ({ default: m.Appointments })))
+const AuditLog = lazy(() => import('./pages/AuditLog').then((m) => ({ default: m.AuditLog })))
+const Inventory = lazy(() => import('./pages/Inventory').then((m) => ({ default: m.Inventory })))
+const InventoryHistory = lazy(() => import('./pages/InventoryHistory').then((m) => ({ default: m.InventoryHistory })))
+const QueueBoard = lazy(() => import('./pages/QueueBoard').then((m) => ({ default: m.QueueBoard })))
+const QueueHistory = lazy(() => import('./pages/QueueHistory').then((m) => ({ default: m.QueueHistory })))
+const Reports = lazy(() => import('./pages/Reports').then((m) => ({ default: m.Reports })))
+const TvBoard = lazy(() => import('./pages/TvBoard').then((m) => ({ default: m.TvBoard })))
+const VisitsSearch = lazy(() => import('./pages/VisitsSearch').then((m) => ({ default: m.VisitsSearch })))
 
 function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/tv-board" element={<TvBoard />} />
+      <Route
+        path="/tv-board"
+        element={
+          <Suspense fallback={null}>
+            <TvBoard />
+          </Suspense>
+        }
+      />
 
       {/* Everything below is signed-in and rendered inside the sidebar shell. */}
       <Route element={<ProtectedRoute />}>
@@ -35,22 +41,17 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/account" element={<Account />} />
 
+          {/* Visit records are for all three professionals. */}
           <Route element={<ProtectedRoute allowedRoles={['admin', 'personnel']} />}>
-            <Route path="/queue" element={<QueueBoard />} />
-            <Route path="/appointments" element={<Appointments />} />
             <Route path="/visits" element={<VisitsSearch />} />
-            <Route path="/inventory" element={<Inventory />} />
-            <Route
-              path="/analytics"
-              element={
-                <Suspense fallback={<PageLoading />}>
-                  <AnalyticsDashboard />
-                </Suspense>
-              }
-            />
           </Route>
 
+          {/* The rest is the head nurse's: she runs the queue and the clinic. */}
           <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+            <Route path="/queue" element={<QueueBoard />} />
+            <Route path="/appointments" element={<Appointments />} />
+            <Route path="/inventory" element={<Inventory />} />
+            <Route path="/analytics" element={<AnalyticsDashboard />} />
             <Route path="/admin/settings" element={<AdminSettings />} />
             <Route path="/admin/reports" element={<Reports />} />
             <Route path="/admin/queue-history" element={<QueueHistory />} />

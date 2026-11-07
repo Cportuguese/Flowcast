@@ -11,7 +11,9 @@ class EventDay extends Model
     protected function casts(): array
     {
         return [
-            'date' => 'date',
+            // Serialised as a plain calendar day. The bare `date` cast sends
+            // a UTC timestamp, which in Manila names the day before.
+            'date' => 'date:Y-m-d',
         ];
     }
 }

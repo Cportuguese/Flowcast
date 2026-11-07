@@ -61,4 +61,27 @@ class StaffAccountTest extends TestCase
 
         $this->assertDatabaseMissing('users', ['email' => 'new@example.com']);
     }
+
+    public function test_make_staff_can_create_a_bookable_professional(): void
+    {
+        $this->artisan('make:staff', [
+            'email' => 'dentist@example.com',
+            '--name' => 'Marco Villanueva',
+            '--profession' => 'dentist',
+            '--password' => 'Secret-Pass-123',
+        ])->assertSuccessful();
+
+        $dentist = User::where('email', 'dentist@example.com')->sole();
+        $this->assertSame('personnel', $dentist->role);
+        $this->assertSame('Dr. Marco Villanueva', $dentist->display_name);
+
+        $this->artisan('make:staff', ['email' => 'x@example.com', '--profession' => 'surgeon'])->assertFailed();
+    }
+
+    public function test_profession_is_not_mass_assignable(): void
+    {
+        $user = User::create(['name' => 'Sneaky', 'email' => 'sneaky@example.com', 'password' => 'irrelevant', 'profession' => 'physician']);
+
+        $this->assertNull($user->fresh()->profession);
+    }
 }

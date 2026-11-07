@@ -1,25 +1,15 @@
-import { lazy, Suspense } from 'react'
-import { PageLoading } from '../components/PageLoading'
 import { PatientWebNotice } from '../components/PatientWebNotice'
 import { useAuth } from '../context/AuthContext'
-import { PersonnelHome } from './home/PersonnelHome'
+import { MySchedule } from './home/MySchedule'
+import { NurseHome } from './home/NurseHome'
 
-// AdminHome pulls in recharts; personnel never render it, so keep it out
-// of their bundle.
-const AdminHome = lazy(() => import('./home/AdminHome').then((m) => ({ default: m.AdminHome })))
-
-// One route, three homes: oversight for admin, queue-first for personnel,
-// and a pointer to the mobile app for patients.
+// One route, three homes: the head nurse's queue-first "Today", the
+// dentist's and school physician's own schedule, and a pointer to the
+// mobile app for patients.
 export function Dashboard() {
   const { user } = useAuth()
 
-  if (user?.role === 'admin') {
-    return (
-      <Suspense fallback={<PageLoading />}>
-        <AdminHome />
-      </Suspense>
-    )
-  }
-  if (user?.role === 'personnel') return <PersonnelHome />
+  if (user?.role === 'admin') return <NurseHome />
+  if (user?.role === 'personnel') return <MySchedule />
   return <PatientWebNotice />
 }

@@ -2,6 +2,7 @@
 
 namespace App\Services\Ml;
 
+use App\Models\Appointment;
 use App\Models\ClinicSchedule;
 use App\Models\EventDay;
 use App\Models\MlModel;
@@ -45,18 +46,23 @@ class WaitTimePredictor
     private ?Collection $schedules = null;
 
     /**
-     * Estimate the wait for someone arriving now with $peopleAhead in front
-     * of them.
+     * Booked times of the nurse's confirmed bookings, per day, memoised
+     * like the entries so a board broadcast queries them once.
      *
-     * @param  int|null  $staffOverride  personnel count to assume instead of
-     *                                   the roster on duty, for staffing what-ifs
+     * @var array<string, array<int, int>>
+     */
+    private array $bookingsByDate = [];
+
+    /**
+     * Estimate the wait for someone arriving now (or at $at) with
+     * $peopleAhead in front of them.
+     *
      * @return array{minutes: int, low: int, high: int, source: string, model_version: int|null}
      */
     public function predict(
         Carbon $date,
         int $peopleAhead,
         bool $isAppointment = false,
-        ?int $staffOverride = null,
         ?Carbon $at = null,
     ): array {
         $model = $this->activeModel();
@@ -68,16 +74,22 @@ class WaitTimePredictor
         $trained = TrainedModel::fromModel($model);
         $arrivedAt = $at ?? Carbon::now();
         $entries = $this->entriesFor($date);
-        [$minutesSinceOpen, $minutesUntilClose] = $this->scheduleOffsets($arrivedAt);
+        [$minutesSinceOpen] = $this->scheduleOffsets($arrivedAt);
+        $inConsultation = $entries->where('status', 'in_consultation')->count();
+
+        // The same rule training uses: nobody ahead and the nurse free means
+        // being seen at once, which needs no model.
+        if (WaitTimeFeatures::isWalkStraightIn($peopleAhead, $inConsultation)) {
+            return ['minutes' => 0, 'low' => 0, 'high' => 0, 'source' => 'model', 'model_version' => $model->version];
+        }
 
         $features = WaitTimeFeatures::build(
             arrivedAt: $arrivedAt,
             peopleAhead: $peopleAhead,
-            inConsultation: $entries->where('status', 'in_consultation')->count(),
-            activeStaff: $staffOverride ?? $this->activeStaffCount($entries),
+            inConsultation: $inConsultation,
             rollingConsultMean: $this->rollingConsultMean($entries),
+            bookingsDueNextHour: WaitTimeFeatures::countDueWithin($this->bookingsOn($arrivedAt), $arrivedAt),
             minutesSinceOpen: $minutesSinceOpen,
-            minutesUntilClose: $minutesUntilClose,
             isEventDay: EventDay::whereDate('date', $date)->exists(),
             isAppointment: $isAppointment,
         );
@@ -138,6 +150,13 @@ class WaitTimePredictor
             return null;
         }
 
+        // A model fitted on a different feature list (one trained before an
+        // upgrade changed the features) cannot be fed today's inputs; the
+        // heuristic serves until `ml:train` fits a new one.
+        if ($model->feature_names !== WaitTimeFeatures::FEATURE_NAMES) {
+            return null;
+        }
+
         return $model;
     }
 
@@ -152,6 +171,7 @@ class WaitTimePredictor
     public function refresh(): void
     {
         $this->entriesByDate = [];
+        $this->bookingsByDate = [];
     }
 
     /** Drop the cached active model so the next prediction re-reads it. */
@@ -182,11 +202,21 @@ class WaitTimePredictor
     }
 
     /**
-     * @param  Collection<int, QueueEntry>  $entries
+     * The nurse's bookings still to be seen on $moment's day. Only
+     * confirmed ones count: a booking under review may never happen, and
+     * one already finished or missed is no longer ahead of anyone.
+     *
+     * @return array<int, int> booked times as timestamps
      */
-    private function activeStaffCount(Collection $entries): int
+    private function bookingsOn(Carbon $moment): array
     {
-        return max($entries->pluck('handled_by_id')->filter()->unique()->count(), 1);
+        return $this->bookingsByDate[$moment->toDateString()] ??= Appointment::query()
+            ->throughQueue()
+            ->whereIn('status', Appointment::OPEN_STATUSES)
+            ->whereDate('scheduled_at', $moment)
+            ->pluck('scheduled_at')
+            ->map(fn ($at): int => Carbon::parse($at)->getTimestamp())
+            ->all();
     }
 
     /**

@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "bmewburn.vscode-intelephense-client",
+    "laravel.vscode-laravel",
+    "bradlc.vscode-tailwindcss",
+    "oxc.oxc-vscode",
+    "expo.vscode-expo-tools",
+    "mikestead.dotenv"
+  ]
+}

@@ -1,12 +1,16 @@
 @import "tailwindcss";
 
-/* Design tokens (docs/ROLE_UI_SPEC.md, Part 2). Everything else is stock Tailwind. */
+/* Design tokens (docs/ROLE_UI_SPEC.md, Part 2; rules in .claude/skills/flowcast-ui).
+   Everything else is stock Tailwind. */
 @theme {
   --color-brand: #0b1636;
+  /* Atkinson Hyperlegible Next: 0/O and 1/l/I are drawn differently, which
+     matters for queue numbers and booking codes. Loaded in main.tsx. */
+  --font-sans: 'Atkinson Hyperlegible Next Variable', system-ui, 'Segoe UI', Roboto, sans-serif;
 }
 
 :root {
-  font: 16px/1.5 system-ui, 'Segoe UI', Roboto, sans-serif;
+  font: 16px/1.5 var(--font-sans);
   color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;

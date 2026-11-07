@@ -41,7 +41,7 @@ class AnalyticsControllerTest extends TestCase
             'status' => 'waiting',
         ]);
 
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $this->getJson('/api/analytics/dashboard')
             ->assertOk()
@@ -85,7 +85,7 @@ class AnalyticsControllerTest extends TestCase
 
         EventDay::create(['date' => $target, 'label' => 'Enrollment']);
 
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $response = $this->getJson('/api/analytics/volume-forecast?days=1')->assertOk();
         $forecastRow = collect($response->json('series'))->firstWhere('date', $target->toDateString());
@@ -198,7 +198,7 @@ class AnalyticsControllerTest extends TestCase
         AnalyticsSnapshot::factory()->create(['date' => today()->copy()->subWeek()->toDateString(), 'hour' => 11, 'arrival_count' => 12]);
         AnalyticsSnapshot::factory()->create(['date' => today()->copy()->subWeeks(2)->toDateString(), 'hour' => 11, 'arrival_count' => 8]);
 
-        Sanctum::actingAs(User::factory()->personnel()->create());
+        Sanctum::actingAs(User::factory()->nurse()->create());
 
         $hours = $this->getJson('/api/analytics/dashboard')->assertOk()->json('upcoming_hours');
 

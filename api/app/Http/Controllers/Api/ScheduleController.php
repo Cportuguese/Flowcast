@@ -17,17 +17,6 @@ class ScheduleController extends Controller
         );
     }
 
-    /**
-     * The active weekly schedule, readable by any authenticated user
-     * (patients need this to know which days to offer for booking).
-     */
-    public function active()
-    {
-        return response()->json(
-            ClinicSchedule::where('is_active', true)->orderBy('day_of_week')->get()
-        );
-    }
-
     public function store(Request $request)
     {
         $validated = $request->validate([

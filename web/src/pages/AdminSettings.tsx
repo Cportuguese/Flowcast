@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../lib/api'
+import { formatLongDate, todayIso } from '../lib/dates'
 import { extractErrorMessage } from '../lib/errors'
 import { PageHeader } from '../components/PageHeader'
 import { buttonClass } from '../components/Button'
+import { ProviderHoursSection } from '../components/ProviderHoursSection'
 import { useToast } from '../components/Toast'
 
 interface ClinicSchedule {
@@ -136,6 +138,32 @@ export function AdminSettings() {
     }
   }
 
+  // Upcoming soonest first; past ones most recent first.
+  const today = todayIso()
+  const upcomingEventDays = eventDays.filter((eventDay) => eventDay.date >= today)
+  const pastEventDays = eventDays.filter((eventDay) => eventDay.date < today).reverse()
+
+  function renderEventDay(eventDay: EventDay) {
+    return (
+      <li key={eventDay.id} className="flex items-center justify-between gap-3 px-5 py-3">
+        <div>
+          <div className="text-sm font-medium text-slate-900">
+            {formatLongDate(eventDay.date)} — {eventDay.label}
+          </div>
+          {eventDay.note && <div className="text-xs text-slate-500">{eventDay.note}</div>}
+        </div>
+        <button
+          type="button"
+          disabled={deletingEventDayId === eventDay.id}
+          onClick={() => handleDeleteEventDay(eventDay.id)}
+          className="shrink-0 rounded bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-200 disabled:opacity-50"
+        >
+          Remove
+        </button>
+      </li>
+    )
+  }
+
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader title="Clinic Settings" />
@@ -150,8 +178,10 @@ export function AdminSettings() {
         <>
           <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 px-5 py-4">
-              <h2 className="text-sm font-semibold text-slate-900">Weekly hours</h2>
-              <p className="text-xs text-slate-500">Turn a day on and set its hours, slot length, and capacity per slot.</p>
+              <h2 className="text-sm font-semibold text-slate-900">Clinic opening hours</h2>
+              <p className="text-xs text-slate-500">
+                When the clinic is open for walk-ins: the queue, the TV board and the wait forecasts follow these hours.
+              </p>
             </div>
             <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm">
@@ -161,8 +191,6 @@ export function AdminSettings() {
                   <th className="px-4 py-3">Open</th>
                   <th className="px-4 py-3">Start</th>
                   <th className="px-4 py-3">End</th>
-                  <th className="px-4 py-3">Slot (min)</th>
-                  <th className="px-4 py-3">Capacity</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -197,25 +225,6 @@ export function AdminSettings() {
                         />
                       </td>
                       <td className="px-4 py-3">
-                        <input
-                          type="number"
-                          min={5}
-                          max={240}
-                          value={form.slot_minutes}
-                          onChange={(e) => updateForm(day, { slot_minutes: Number(e.target.value) })}
-                          className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="number"
-                          min={1}
-                          value={form.capacity}
-                          onChange={(e) => updateForm(day, { capacity: Number(e.target.value) })}
-                          className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
-                        />
-                      </td>
-                      <td className="px-4 py-3">
                         <button
                           type="button"
                           disabled={savingDay === day}
@@ -232,6 +241,8 @@ export function AdminSettings() {
             </table>
             </div>
           </section>
+
+          <ProviderHoursSection />
 
           <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 px-5 py-4">
@@ -274,28 +285,21 @@ export function AdminSettings() {
             </form>
 
             <ul className="divide-y divide-slate-100">
-              {eventDays.length === 0 && (
-                <li className="px-5 py-4 text-sm text-slate-400">No event days flagged.</li>
+              {upcomingEventDays.length === 0 && (
+                <li className="px-5 py-4 text-sm text-slate-400">No upcoming event days flagged.</li>
               )}
-              {eventDays.map((eventDay) => (
-                <li key={eventDay.id} className="flex items-center justify-between px-5 py-3">
-                  <div>
-                    <div className="text-sm font-medium text-slate-900">
-                      {eventDay.date} — {eventDay.label}
-                    </div>
-                    {eventDay.note && <div className="text-xs text-slate-500">{eventDay.note}</div>}
-                  </div>
-                  <button
-                    type="button"
-                    disabled={deletingEventDayId === eventDay.id}
-                    onClick={() => handleDeleteEventDay(eventDay.id)}
-                    className="rounded bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-200 disabled:opacity-50"
-                  >
-                    Remove
-                  </button>
-                </li>
-              ))}
+              {upcomingEventDays.map(renderEventDay)}
             </ul>
+
+            {/* Past days stay on file (the forecasts learn from them) but out of the way. */}
+            {pastEventDays.length > 0 && (
+              <details className="border-t border-slate-200">
+                <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-slate-600 hover:text-slate-900">
+                  Past event days ({pastEventDays.length})
+                </summary>
+                <ul className="divide-y divide-slate-100 border-t border-slate-100">{pastEventDays.map(renderEventDay)}</ul>
+              </details>
+            )}
           </section>
         </>
       )}

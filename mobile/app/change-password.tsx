@@ -6,10 +6,9 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  Text,
-  TextInput,
   View,
 } from 'react-native';
+import { Text, TextInput } from '../components/Text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../lib/api';
 import { extractErrorMessage } from '../lib/errors';

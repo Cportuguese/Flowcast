@@ -1,11 +1,14 @@
-import { useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { PatientSummary } from '../components/PatientSummary'
 import { VisitFormModal } from '../components/VisitFormModal'
-import { api } from '../lib/api'
-import { extractErrorMessage } from '../lib/errors'
+import { WalkInPanel } from '../components/WalkInPanel'
+import { formatTime } from '../lib/dates'
 import {
   QUEUE_STATUS_LABELS,
   QUEUE_STATUS_TONES,
+  isDueBooking,
+  isResolved,
   type QueueEntry,
 } from '../lib/queue'
 import { timeInQueue, useTodayQueue } from '../lib/useTodayQueue'
@@ -21,7 +24,6 @@ export function QueueBoard() {
     inConsultation,
     isLoading,
     actionError,
-    setActionError,
     isCallingNext,
     busyEntryId,
     callNext,
@@ -33,45 +35,27 @@ export function QueueBoard() {
   const [statusFilter, setStatusFilter] = useState<'all' | QueueEntry['status']>('all')
   const [search, setSearch] = useState('')
   const [visitFormEntry, setVisitFormEntry] = useState<QueueEntry | null>(null)
-
   const [showWalkInForm, setShowWalkInForm] = useState(() => searchParams.get('walkin') === '1')
-  const [walkInName, setWalkInName] = useState('')
-  const [walkInContact, setWalkInContact] = useState('')
-  const [walkInType, setWalkInType] = useState<'' | 'student' | 'faculty' | 'staff'>('')
-  const [isSubmittingWalkIn, setIsSubmittingWalkIn] = useState(false)
-
-  async function handleWalkInSubmit(event: FormEvent) {
-    event.preventDefault()
-    setActionError(null)
-    setIsSubmittingWalkIn(true)
-
-    try {
-      await api.post('/admin/queue/walk-in', {
-        name: walkInName,
-        contact_no: walkInContact || null,
-        patient_type: walkInType || null,
-      })
-      setWalkInName('')
-      setWalkInContact('')
-      setWalkInType('')
-      setShowWalkInForm(false)
-    } catch (err) {
-      setActionError(extractErrorMessage(err, 'Unable to register this walk-in.'))
-    } finally {
-      setIsSubmittingWalkIn(false)
-    }
-  }
 
   const needle = search.trim().toLowerCase()
-  const visibleEntries = entries.filter(
-    (e) =>
-      (statusFilter === 'all' || e.status === statusFilter) &&
-      (!needle || e.patient.name.toLowerCase().includes(needle) || String(e.queue_number) === needle),
-  )
+  // Finished entries sink below the active ones, so on a busy day the
+  // patients still to be seen stay at the top instead of under a growing
+  // pile of done tickets. Sorting is stable, so each group keeps its
+  // queue-number order.
+  const visibleEntries = entries
+    .filter(
+      (e) =>
+        (statusFilter === 'all' || e.status === statusFilter) &&
+        (!needle ||
+          e.patient.name.toLowerCase().includes(needle) ||
+          String(e.queue_number) === needle ||
+          (e.patient.school_id ?? '').startsWith(needle)),
+    )
+    .sort((a, b) => Number(isResolved(a)) - Number(isResolved(b)))
 
   return (
     <>
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-5xl">
         <PageHeader title="Live Queue" subtitle={date ?? '—'} />
 
         {actionError && (
@@ -92,7 +76,7 @@ export function QueueBoard() {
             onClick={() => setShowWalkInForm((v) => !v)}
             className={buttonClass.outline}
           >
-            {showWalkInForm ? 'Cancel walk-in' : 'Register walk-in'}
+            {showWalkInForm ? 'Close walk-in' : 'Register walk-in'}
           </button>
           {inConsultation.length > 0 && (
             <span className="text-sm text-slate-500">
@@ -101,65 +85,7 @@ export function QueueBoard() {
           )}
         </div>
 
-        {showWalkInForm && (
-          <form
-            onSubmit={handleWalkInSubmit}
-            className="mt-4 grid gap-3 rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-2"
-          >
-            <div className="sm:col-span-2">
-              <h2 className="text-sm font-semibold text-slate-900">Walk-in registration</h2>
-              <p className="text-xs text-slate-500">For patients who don't have the app.</p>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-700" htmlFor="walkin-name">
-                Full name
-              </label>
-              <input
-                id="walkin-name"
-                required
-                value={walkInName}
-                onChange={(event) => setWalkInName(event.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-700" htmlFor="walkin-contact">
-                Contact number
-              </label>
-              <input
-                id="walkin-contact"
-                value={walkInContact}
-                onChange={(event) => setWalkInContact(event.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-700" htmlFor="walkin-type">
-                Patient type
-              </label>
-              <select
-                id="walkin-type"
-                value={walkInType}
-                onChange={(event) => setWalkInType(event.target.value as typeof walkInType)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
-              >
-                <option value="">—</option>
-                <option value="student">Student</option>
-                <option value="faculty">Faculty</option>
-                <option value="staff">School Employee</option>
-              </select>
-            </div>
-            <div className="flex items-end">
-              <button
-                type="submit"
-                disabled={isSubmittingWalkIn}
-                className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
-              >
-                {isSubmittingWalkIn ? 'Checking in…' : 'Check in'}
-              </button>
-            </div>
-          </form>
-        )}
+        {showWalkInForm && <WalkInPanel onCheckedIn={() => setShowWalkInForm(false)} />}
 
         <div className="mt-6 flex flex-wrap items-end gap-1 border-b border-slate-200">
           {(['all', 'waiting', 'in_consultation', 'done', 'skipped'] as const).map((tab) => (
@@ -180,19 +106,19 @@ export function QueueBoard() {
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Find by name or #"
-            aria-label="Find patient by name or queue number"
-            className="mb-1.5 ml-auto w-48 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            placeholder="Find by name, # or ID"
+            aria-label="Find patient by name, queue number or ID number"
+            className="mb-1.5 ml-auto w-52 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
         </div>
 
         <div className="overflow-x-auto rounded-b-lg rounded-tr-lg border border-slate-200 bg-white shadow-sm">
-          <table className="w-full min-w-[640px] text-left text-sm">
+          <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
                 <th className="px-4 py-3">#</th>
                 <th className="px-4 py-3">Patient</th>
-                <th className="px-4 py-3">Source</th>
+                <th className="px-4 py-3">Came as</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Called</th>
                 <th className="px-4 py-3">Time in queue</th>
@@ -218,20 +144,24 @@ export function QueueBoard() {
                 <tr key={entry.id}>
                   <td className="px-4 py-3 font-semibold text-slate-900">{entry.queue_number}</td>
                   <td className="px-4 py-3">
-                    <div className="font-medium text-slate-900">{entry.patient.name}</div>
-                    {entry.patient.contact_no && (
-                      <div className="text-xs text-slate-500">{entry.patient.contact_no}</div>
+                    <PatientSummary patient={entry.patient} />
+                    {entry.patient.contact_no && <div className="text-xs text-slate-400">{entry.patient.contact_no}</div>}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {entry.booked_for ? (
+                      <StatusPill tone={entry.status === 'waiting' && isDueBooking(entry) ? 'info' : 'neutral'}>
+                        Booked {formatTime(entry.booked_for)}
+                      </StatusPill>
+                    ) : (
+                      'Walk-in'
                     )}
                   </td>
-                  <td className="px-4 py-3 capitalize text-slate-600">{entry.source.replace('_', ' ')}</td>
                   <td className="px-4 py-3">
                     <StatusPill tone={QUEUE_STATUS_TONES[entry.status]}>
                       {QUEUE_STATUS_LABELS[entry.status]}
                     </StatusPill>
                   </td>
-                  <td className="px-4 py-3 text-slate-500">
-                    {entry.called_at ? new Date(entry.called_at).toLocaleTimeString() : '—'}
-                  </td>
+                  <td className="px-4 py-3 text-slate-500">{entry.called_at ? formatTime(entry.called_at) : '—'}</td>
                   <td className="px-4 py-3 text-slate-500">{timeInQueue(entry)}</td>
                   <td className="px-4 py-3">
                     {entry.status === 'in_consultation' && (
@@ -274,8 +204,9 @@ export function QueueBoard() {
 
       {visitFormEntry && (
         <VisitFormModal
-          queueEntryId={visitFormEntry.id}
+          source={{ queueEntryId: visitFormEntry.id }}
           patientName={visitFormEntry.patient.name}
+          initialComplaint={visitFormEntry.booking_reason ?? undefined}
           onClose={() => setVisitFormEntry(null)}
           onSaved={() => setVisitFormEntry(null)}
         />

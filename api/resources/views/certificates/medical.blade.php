@@ -9,6 +9,7 @@
         .header { border-bottom: 2px solid #0b1636; padding-bottom: 12px; margin-bottom: 28px; }
         .clinic { font-size: 18px; font-weight: bold; color: #0b1636; letter-spacing: 0.5px; }
         .institution { color: #475569; }
+        .mark { float: left; width: 40px; height: 40px; margin: 3px 12px 0 0; }
         .meta { float: right; text-align: right; color: #475569; font-size: 11px; }
         .title { text-align: center; font-size: 20px; font-weight: bold; letter-spacing: 2px; margin: 24px 0 28px; }
         p { margin: 0 0 12px; }
@@ -21,20 +22,38 @@
     </style>
 </head>
 <body>
+    @php
+        // Official Flowcast mark, generated from brand/logo-mark.svg. Embedded
+        // as data so dompdf never has to fetch a file or URL.
+        $mark = base64_encode(file_get_contents(resource_path('images/logo-mark.png')));
+    @endphp
     <div class="header">
+        <img class="mark" src="data:image/png;base64,{{ $mark }}" alt="Flowcast">
         <div class="meta">
             Certificate No. <strong>{{ $certificate->certificate_no }}</strong><br>
             Issued {{ $certificate->created_at->format('F j, Y') }}
         </div>
         <div class="clinic">{{ $clinic['name'] }}</div>
         <div class="institution">{{ implode(' · ', array_filter([$clinic['institution'], $clinic['address']])) }}</div>
+        <div style="clear: both;"></div>
     </div>
 
     <div class="title">MEDICAL CERTIFICATE</div>
 
     @php
+        // "a BS Information Technology student (SITE)", "a faculty member of
+        // the School of Teacher Education" — whatever the record supports.
+        $course = \App\Support\Udd::courseName($patient->course);
+        $department = \App\Support\Udd::departmentName($patient->department);
+        $role = match ($patient->patient_type) {
+            'student' => $course ? "a {$course} student" : 'a student',
+            'faculty' => 'a faculty member',
+            'staff' => 'an employee',
+            default => null,
+        };
+        $of = $department && ! $course ? " of the {$department}" : ($department && $course ? " ({$patient->department})" : '');
         $who = implode(' ', array_filter([
-            $patient->patient_type ? ', a '.$patient->patient_type : null,
+            $role ? ', '.$role.$of : null,
             $patient->school_id ? '(ID No. '.$patient->school_id.')' : null,
         ]));
     @endphp
@@ -44,16 +63,17 @@
 
         <p>
             This is to certify that <strong>{{ $patient->name }}</strong>{{ $who }},
-            was seen and examined at {{ $clinic['name'] }} on
-            <strong>{{ $visit->created_at->format('F j, Y') }}</strong>.
+            was seen at {{ $clinic['name'] }} on
+            <strong>{{ $visit->created_at->format('F j, Y') }}</strong>
+            for <strong>{{ Str::lower($visit->complaint) }}</strong>.
         </p>
 
         <div class="box">
-            <div class="label">Assessment</div>
-            <div>{{ $visit->diagnosis }}</div>
-            @if ($visit->treatment)
-                <div class="label" style="margin-top: 10px;">Treatment given</div>
-                <div>{{ $visit->treatment }}</div>
+            <div class="label">Intervention</div>
+            <div>{{ $visit->intervention }}</div>
+            @if ($visit->referred_to)
+                <div class="label" style="margin-top: 10px;">Referred to</div>
+                <div>{{ $visit->referred_to }}</div>
             @endif
         </div>
 
@@ -81,8 +101,8 @@
 
     <div class="signature">
         <div class="line">
-            <strong>{{ $issuer->name }}</strong><br>
-            <span style="color: #475569;">Clinic Personnel, {{ $clinic['name'] }}</span>
+            <strong>{{ $issuer->signatureName() }}</strong><br>
+            <span style="color: #475569;">{{ $issuer->job_title ?? 'Clinic Personnel' }}, {{ $clinic['name'] }}</span>
         </div>
     </div>
 

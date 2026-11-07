@@ -84,6 +84,33 @@ class WaitTimePredictionTest extends TestCase
         $this->assertSame('heuristic', $this->predictor()->predict(today(), 4)['source']);
     }
 
+    /**
+     * A model trained before an upgrade changed the feature list cannot be
+     * fed today's inputs: the heuristic serves (instead of every queue
+     * screen failing) until ml:train fits a new one.
+     */
+    public function test_it_ignores_a_model_fitted_on_an_older_feature_list(): void
+    {
+        $old = ['people_ahead', 'in_consultation', 'active_staff', 'people_ahead_per_staff'];
+        MlModel::factory()->active()->create([
+            'feature_names' => $old,
+            'coefficients' => [1.0, 0.5, -1.5, 4.0],
+            'feature_means' => [0.0, 0.0, 0.0, 0.0],
+            'feature_stds' => [1.0, 1.0, 1.0, 1.0],
+        ]);
+
+        $this->assertSame('heuristic', $this->predictor()->predict(today(), 4)['source']);
+    }
+
+    public function test_nobody_ahead_and_nobody_with_the_nurse_is_zero_minutes(): void
+    {
+        MlModel::factory()->active()->create();
+
+        $result = $this->predictor()->predict(today(), 0);
+
+        $this->assertSame([0, 0, 0, 'model'], [$result['minutes'], $result['low'], $result['high'], $result['source']]);
+    }
+
     public function test_the_prediction_always_sits_inside_its_own_interval(): void
     {
         MlModel::factory()->active()->create();

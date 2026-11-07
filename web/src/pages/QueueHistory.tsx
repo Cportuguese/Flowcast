@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
+import { PatientSummary } from '../components/PatientSummary'
 import { StatusPill } from '../components/StatusPill'
 import { StatTile } from '../components/StatTile'
 import { api } from '../lib/api'
 import { formatTime, todayIso } from '../lib/dates'
 import { extractErrorMessage } from '../lib/errors'
+import { useLatestRequest } from '../lib/useLatestRequest'
 import {
   QUEUE_STATUS_LABELS,
   QUEUE_STATUS_TONES,
@@ -22,19 +24,26 @@ export function QueueHistory() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async (day: string) => {
-    setIsLoading(true)
-    setError(null)
-    try {
-      const response = await api.get<{ date: string; entries: QueueEntry[] }>(`/queue/${day}/history`)
-      setEntries(response.data.entries)
-    } catch (err) {
-      setEntries([])
-      setError(extractErrorMessage(err, 'Unable to load queue history.'))
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
+  const begin = useLatestRequest()
+
+  const load = useCallback(
+    async (day: string) => {
+      const isCurrent = begin()
+      setIsLoading(true)
+      setError(null)
+      try {
+        const response = await api.get<{ date: string; entries: QueueEntry[] }>(`/queue/${day}/history`)
+        if (isCurrent()) setEntries(response.data.entries)
+      } catch (err) {
+        if (!isCurrent()) return
+        setEntries([])
+        setError(extractErrorMessage(err, 'Unable to load queue history.'))
+      } finally {
+        if (isCurrent()) setIsLoading(false)
+      }
+    },
+    [begin],
+  )
 
   useEffect(() => {
     void load(date)
@@ -104,12 +113,11 @@ export function QueueHistory() {
               <tr key={entry.id}>
                 <td className="px-4 py-3 font-semibold text-slate-900">{entry.queue_number}</td>
                 <td className="px-4 py-3">
-                  <div className="font-medium text-slate-900">{entry.patient.name}</div>
-                  {entry.patient.contact_no && (
-                    <div className="text-xs text-slate-500">{entry.patient.contact_no}</div>
-                  )}
+                  <PatientSummary patient={entry.patient} />
                 </td>
-                <td className="px-4 py-3 capitalize text-slate-600">{entry.source.replace('_', ' ')}</td>
+                <td className="px-4 py-3 text-slate-600">
+                  {entry.booked_for ? `Booked ${formatTime(entry.booked_for)}` : 'Walk-in'}
+                </td>
                 <td className="px-4 py-3">
                   <StatusPill tone={QUEUE_STATUS_TONES[entry.status]}>
                     {QUEUE_STATUS_LABELS[entry.status]}

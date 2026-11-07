@@ -43,6 +43,11 @@ return [
             ],
             'client_options' => [
                 // Guzzle client options: https://docs.guzzlephp.org/en/stable/request-options.html
+                // Without these an unreachable Reverb host makes each live
+                // update wait for curl's default (minutes), stalling the
+                // queue action that triggered it. See App\Support\Realtime.
+                'connect_timeout' => 2,
+                'timeout' => 5,
             ],
         ],
 

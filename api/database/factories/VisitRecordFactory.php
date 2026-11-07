@@ -18,10 +18,10 @@ class VisitRecordFactory extends Factory
             'queue_entry_id' => QueueEntry::factory(),
             // Mirrors the controller: patient is the queue entry's patient.
             'patient_id' => fn (array $attributes) => QueueEntry::find($attributes['queue_entry_id'])->patient_id,
-            'created_by_id' => User::factory()->personnel(),
+            'created_by_id' => User::factory()->admin(),
             'complaint' => fake()->sentence(),
-            'diagnosis' => fake()->sentence(),
-            'treatment' => fake()->sentence(),
+            'intervention' => fake()->sentence(),
+            'remarks' => fake()->sentence(),
         ];
     }
 }

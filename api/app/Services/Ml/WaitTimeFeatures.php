@@ -2,6 +2,7 @@
 
 namespace App\Services\Ml;
 
+use App\Models\Appointment;
 use App\Models\ClinicSchedule;
 use App\Models\EventDay;
 use App\Models\QueueEntry;
@@ -19,8 +20,24 @@ use Illuminate\Support\Collection;
  * was evaluated, so that path is closed off here by construction.
  *
  * Every feature is computed strictly as of the moment of arrival. The one
- * feature that reads the whole day, `active_staff`, is the day's personnel
- * roster, which is known when the clinic opens rather than discovered later.
+ * that looks ahead, `bookings_due_next_hour`, reads the nurse's confirmed
+ * bookings — which are on her schedule before the patient walks in, so it
+ * is known at arrival rather than discovered later.
+ *
+ * UDD's clinic has one nurse running the queue, so the staffing features of
+ * the first version (`active_staff`, `people_ahead_per_staff`) were dropped
+ * after the alpha review: with one nurse they never vary and carry nothing.
+ *
+ * With one nurse the old formula — people ahead x the recent consultation
+ * pace — is already most of the answer, so it is now an INPUT
+ * (`queue_minutes_ahead`) rather than a rival: the model learns how far to
+ * trust it and what to add on top. Chiefly the booked patients the nurse
+ * will see at their booked time, ahead of the line, and the patient already
+ * in the consultation room.
+ *
+ * `minutes_until_close` was dropped too: every clinic day now runs 8 to 6,
+ * so it was always 600 minus `minutes_since_open`, and ridge split that one
+ * signal into two huge opposite coefficients that read as nonsense.
  */
 class WaitTimeFeatures
 {
@@ -32,18 +49,15 @@ class WaitTimeFeatures
      * @var array<int, string>
      */
     public const FEATURE_NAMES = [
+        'queue_minutes_ahead',
         'people_ahead',
         'in_consultation',
-        'active_staff',
-        'people_ahead_per_staff',
-        'rolling_consult_mean',
+        'bookings_due_next_hour',
         'hour_sin',
         'hour_cos',
         'minutes_since_open',
-        'minutes_until_close',
         'is_event_day',
         'is_appointment',
-        'dow_1',
         'dow_2',
         'dow_3',
         'dow_4',
@@ -56,6 +70,17 @@ class WaitTimeFeatures
 
     /** Consult length assumed before any consultation has finished. */
     public const DEFAULT_CONSULT_MINUTES = 5.0;
+
+    /** How far ahead `bookings_due_next_hour` looks, in minutes. */
+    public const BOOKING_LOOKAHEAD_MINUTES = 60;
+
+    /**
+     * Booking statuses that were on the nurse's schedule at the time: in
+     * history a booking that later finished or was missed was still due
+     * when an earlier patient arrived. Cancelled, declined and unreviewed
+     * bookings never were.
+     */
+    public const SCHEDULED_BOOKING_STATUSES = ['booked', 'checked_in', 'completed', 'no_show'];
 
     /** Clinic hours assumed when a weekday has no configured schedule. */
     private const DEFAULT_OPEN_HOUR = 8;
@@ -71,37 +96,59 @@ class WaitTimeFeatures
         Carbon $arrivedAt,
         int $peopleAhead,
         int $inConsultation,
-        int $activeStaff,
         float $rollingConsultMean,
+        int $bookingsDueNextHour,
         int $minutesSinceOpen,
-        int $minutesUntilClose,
         bool $isEventDay,
         bool $isAppointment,
     ): array {
-        $staff = max($activeStaff, 1);
         $hourOfDay = $arrivedAt->hour + ($arrivedAt->minute / 60);
         $dayOfWeek = $arrivedAt->dayOfWeek;
 
         $features = [
+            'queue_minutes_ahead' => self::queueMinutes($peopleAhead, $rollingConsultMean),
             'people_ahead' => (float) $peopleAhead,
             'in_consultation' => (float) $inConsultation,
-            'active_staff' => (float) $staff,
-            'people_ahead_per_staff' => (float) $peopleAhead / $staff,
-            'rolling_consult_mean' => $rollingConsultMean,
+            'bookings_due_next_hour' => (float) $bookingsDueNextHour,
             'hour_sin' => sin(2 * M_PI * $hourOfDay / 24),
             'hour_cos' => cos(2 * M_PI * $hourOfDay / 24),
             'minutes_since_open' => (float) max($minutesSinceOpen, 0),
-            'minutes_until_close' => (float) max($minutesUntilClose, 0),
             'is_event_day' => $isEventDay ? 1.0 : 0.0,
             'is_appointment' => $isAppointment ? 1.0 : 0.0,
         ];
 
-        /** Sunday (0) is the omitted baseline category. */
-        for ($day = 1; $day <= 6; $day++) {
+        /*
+         * Monday is the omitted baseline. The clinic never opens on Sunday,
+         * so with Sunday as the baseline the six dummies always summed to one
+         * and duplicated the intercept: ridge then smeared a constant across
+         * them and the importance chart showed big weekday bars that meant
+         * nothing. A Sunday arrival (never in training) reads as a Monday.
+         */
+        for ($day = 2; $day <= 6; $day++) {
             $features["dow_{$day}"] = $dayOfWeek === $day ? 1.0 : 0.0;
         }
 
         return $features;
+    }
+
+    /**
+     * Nobody waiting ahead and nobody with the nurse: the patient is called
+     * straight away, so the wait is zero by definition rather than by
+     * prediction. Training, scoring and serving all treat this case the
+     * same way.
+     */
+    public static function isWalkStraightIn(int $peopleAhead, int $inConsultation): bool
+    {
+        return $peopleAhead === 0 && $inConsultation === 0;
+    }
+
+    /**
+     * The old formula's answer: everyone ahead, at the clinic's recent pace.
+     * Never below one minute a head, as the formula has always assumed.
+     */
+    public static function queueMinutes(int $peopleAhead, float $rollingConsultMean): float
+    {
+        return (float) $peopleAhead * max($rollingConsultMean, 1.0);
     }
 
     /**
@@ -162,6 +209,8 @@ class WaitTimeFeatures
             ->map(fn (Carbon $date): string => $date->toDateString())
             ->flip();
 
+        $bookingsByDate = self::queueBookingTimesByDate();
+
         $samples = [];
         $targets = [];
         $dates = [];
@@ -175,7 +224,7 @@ class WaitTimeFeatures
 
         foreach ($byDate as $date => $dayEntries) {
             $isEventDay = $eventDates->has($date);
-            $activeStaff = $dayEntries->pluck('handled_by_id')->filter()->unique()->count();
+            $dayBookings = $bookingsByDate[$date] ?? [];
 
             foreach ($dayEntries as $entry) {
                 if (! $entry->joined_at || ! $entry->called_at) {
@@ -183,16 +232,24 @@ class WaitTimeFeatures
                 }
 
                 $arrivedAt = Carbon::parse($entry->joined_at);
-                [$sinceOpen, $untilClose] = self::scheduleOffsets($arrivedAt, $schedules);
+                [$sinceOpen] = self::scheduleOffsets($arrivedAt, $schedules);
+                $peopleAhead = self::peopleAheadAt($dayEntries, $entry, $arrivedAt);
+                $inConsultation = self::inConsultationAt($dayEntries, $entry, $arrivedAt);
+
+                // Nobody ahead and the nurse free: seen at once, by
+                // definition. There is nothing to predict, so these rows
+                // neither train nor score the model (or the baseline).
+                if (self::isWalkStraightIn($peopleAhead, $inConsultation)) {
+                    continue;
+                }
 
                 $features = self::build(
                     arrivedAt: $arrivedAt,
-                    peopleAhead: self::peopleAheadAt($dayEntries, $entry, $arrivedAt),
-                    inConsultation: self::inConsultationAt($dayEntries, $arrivedAt),
-                    activeStaff: $activeStaff,
+                    peopleAhead: $peopleAhead,
+                    inConsultation: $inConsultation,
                     rollingConsultMean: self::rollingConsultMeanAt($dayEntries, $arrivedAt),
+                    bookingsDueNextHour: self::countDueWithin($dayBookings, $arrivedAt),
                     minutesSinceOpen: $sinceOpen,
-                    minutesUntilClose: $untilClose,
                     isEventDay: $isEventDay,
                     isAppointment: $entry->source === 'appointment',
                 );
@@ -209,6 +266,40 @@ class WaitTimeFeatures
             'dates' => $dates,
             'feature_names' => self::FEATURE_NAMES,
         ];
+    }
+
+    /**
+     * The nurse's confirmed bookings due after $moment and within the
+     * look-ahead window — the patients she will take ahead of the line soon.
+     *
+     * @param  array<int, int>  $bookingTimestamps  that day's booked times
+     */
+    public static function countDueWithin(array $bookingTimestamps, Carbon $moment): int
+    {
+        $from = $moment->getTimestamp();
+        $until = $from + self::BOOKING_LOOKAHEAD_MINUTES * 60;
+
+        return count(array_filter(
+            $bookingTimestamps,
+            static fn (int $at): bool => $at > $from && $at <= $until,
+        ));
+    }
+
+    /**
+     * Booked times of every scheduled booking that goes through the queue
+     * (the nurse's), grouped by date — one query for the whole history.
+     *
+     * @return array<string, array<int, int>> date string => timestamps
+     */
+    public static function queueBookingTimesByDate(): array
+    {
+        return Appointment::query()
+            ->throughQueue()
+            ->whereIn('status', self::SCHEDULED_BOOKING_STATUSES)
+            ->get(['scheduled_at'])
+            ->groupBy(fn (Appointment $booking): string => $booking->scheduled_at->toDateString())
+            ->map(fn ($bookings): array => $bookings->map(fn (Appointment $booking): int => $booking->scheduled_at->getTimestamp())->values()->all())
+            ->all();
     }
 
     /**
@@ -229,13 +320,23 @@ class WaitTimeFeatures
     }
 
     /**
-     * Entries already called but not yet finished at the given moment.
+     * Other patients already called, and not yet finished, when this one
+     * arrived.
+     *
+     * Never the arriving patient: someone called the second they walk in has
+     * a called_at equal to their own arrival, and counting them as "in
+     * consultation" would leak their zero wait into their own features —
+     * the live queue never sees that, so it was training/serving skew.
      *
      * @param  Collection<int, QueueEntry>  $dayEntries
      */
-    private static function inConsultationAt(Collection $dayEntries, Carbon $arrivedAt): int
+    public static function inConsultationAt(Collection $dayEntries, QueueEntry $entry, Carbon $arrivedAt): int
     {
-        return $dayEntries->filter(function (QueueEntry $other) use ($arrivedAt): bool {
+        return $dayEntries->filter(function (QueueEntry $other) use ($entry, $arrivedAt): bool {
+            if ($other->id === $entry->id) {
+                return false;
+            }
+
             if ($other->called_at === null || Carbon::parse($other->called_at)->greaterThan($arrivedAt)) {
                 return false;
             }
@@ -274,19 +375,17 @@ class WaitTimeFeatures
      * Scoring the baseline from the identical holdout rows is what makes the
      * comparison fair: both are asked the same question about the same
      * arrivals, so a difference in MAE is a difference in accuracy and not
-     * an artefact of different evaluation sets.
+     * an artefact of different evaluation sets. The formula's answer is the
+     * `queue_minutes_ahead` input itself, so the baseline reads it straight
+     * off the row.
      *
      * @param  array<int, array<int, float>>  $samples
      * @return array<int, float>
      */
     public static function baselinePredictions(array $samples): array
     {
-        $peopleAhead = (int) array_search('people_ahead', self::FEATURE_NAMES, true);
-        $consultMean = (int) array_search('rolling_consult_mean', self::FEATURE_NAMES, true);
+        $queueMinutes = (int) array_search('queue_minutes_ahead', self::FEATURE_NAMES, true);
 
-        return array_map(
-            static fn (array $row): float => $row[$peopleAhead] * max($row[$consultMean], 1.0),
-            $samples,
-        );
+        return array_map(static fn (array $row): float => $row[$queueMinutes], $samples);
     }
 }

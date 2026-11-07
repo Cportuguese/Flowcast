@@ -8,6 +8,12 @@ import { Button } from './Button'
 interface Props {
   visitId: number
   certificate: Certificate | null
+  /**
+   * Whether this user may issue one for this visit: the head nurse for any
+   * visit, the dentist and physician for the visits they recorded. The API
+   * enforces the same rule; this only decides whether to offer the form.
+   */
+  canIssue?: boolean
   onIssued: (certificate: Certificate) => void
 }
 
@@ -15,12 +21,13 @@ const inputClass =
   'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100'
 
 /**
- * Medical certificate for one visit. Personnel see a small issue form until
- * one exists; everyone with access to the visit sees the download once it does.
+ * Medical certificate for one visit. Whoever may issue it sees a small form
+ * until one exists; everyone with access to the visit sees the download
+ * once it does.
  */
-export function CertificatePanel({ visitId, certificate, onIssued }: Props) {
+export function CertificatePanel({ visitId, certificate, canIssue: canIssueProp, onIssued }: Props) {
   const { user } = useAuth()
-  const canIssue = user?.role === 'personnel'
+  const canIssue = canIssueProp ?? user?.role === 'admin'
 
   const [restDays, setRestDays] = useState('0')
   const [remarks, setRemarks] = useState('')

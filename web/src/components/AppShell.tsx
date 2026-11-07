@@ -1,21 +1,30 @@
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import logo from '../assets/logo.png'
 import { useAuth } from '../context/AuthContext'
+import { LogoMark } from './Logo'
+import { PageLoading } from './PageLoading'
+import { usePendingReviews } from '../lib/usePendingReviews'
 
 interface NavItem {
   to: string
   label: string
 }
 
-// Visible to admin + personnel. Order matches the daily workflow.
-const STAFF_NAV: NavItem[] = [
-  { to: '/dashboard', label: 'Home' },
+// The head nurse (admin) runs the clinic. Order matches her day.
+const NURSE_NAV: NavItem[] = [
+  { to: '/dashboard', label: 'Today' },
   { to: '/queue', label: 'Live Queue' },
   { to: '/appointments', label: 'Appointments' },
   { to: '/visits', label: 'Visit Records' },
   { to: '/inventory', label: 'Inventory' },
   { to: '/analytics', label: 'Analytics' },
+]
+
+// The dentist and the school physician only need their own bookings and
+// the patients' records.
+const PROFESSIONAL_NAV: NavItem[] = [
+  { to: '/dashboard', label: 'My Schedule' },
+  { to: '/visits', label: 'Visit Records' },
 ]
 
 // Appended under an "Admin" heading for admins only.
@@ -48,6 +57,9 @@ export function AppShell() {
 
   const isStaff = user?.role === 'admin' || user?.role === 'personnel'
   const isAdmin = user?.role === 'admin'
+  const staffNav = isAdmin ? NURSE_NAV : PROFESSIONAL_NAV
+  // Requests waiting for the head nurse, shown as a count on Appointments.
+  const { pending } = usePendingReviews(isAdmin)
 
   async function handleLogout() {
     await logout()
@@ -61,34 +73,42 @@ export function AppShell() {
   const sidebar = (
     <div className="flex h-full flex-col bg-brand text-white">
       <div className="flex items-center gap-3 px-5 py-5">
-        <span className="rounded-lg bg-white p-1">
-          <img src={logo} alt="" className="h-7 w-7" />
-        </span>
-        <span className="text-base font-semibold tracking-tight">Flowcast</span>
+        <LogoMark tone="white" className="h-7 w-7" />
+        <span className="text-base font-semibold">Flowcast</span>
       </div>
 
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 pb-4">
         {isStaff && (
           <div className="space-y-0.5">
-            {STAFF_NAV.map((item) => (
+            {staffNav.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 end={item.to === '/dashboard'}
                 onClick={closeDrawer}
-                className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkIdle}`}
+                className={({ isActive }) => `${linkBase} flex items-center justify-between ${isActive ? linkActive : linkIdle}`}
               >
                 {item.label}
+                {item.to === '/appointments' && pending.length > 0 && (
+                  <span
+                    className="rounded-full bg-amber-400 px-2 py-0.5 text-[11px] font-semibold text-slate-900"
+                    aria-label={`${pending.length} bookings to review`}
+                  >
+                    {pending.length}
+                  </span>
+                )}
               </NavLink>
             ))}
-            <a
-              href="/tv-board"
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`${linkBase} ${linkIdle}`}
-            >
-              TV Board ↗
-            </a>
+            {isAdmin && (
+              <a
+                href="/tv-board"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`${linkBase} ${linkIdle}`}
+              >
+                TV Board ↗
+              </a>
+            )}
           </div>
         )}
 
@@ -124,8 +144,8 @@ export function AppShell() {
             {initials(user?.name)}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{user?.name}</p>
-            <p className="text-xs capitalize text-slate-400">{user?.role}</p>
+            <p className="truncate text-sm font-medium">{user?.display_name ?? user?.name}</p>
+            <p className="text-xs capitalize text-slate-400">{user?.job_title ?? user?.role}</p>
           </div>
         </NavLink>
         <button
@@ -149,9 +169,7 @@ export function AppShell() {
       {/* Mobile top bar */}
       <header className="sticky top-0 z-30 flex items-center justify-between bg-brand px-4 py-3 text-white lg:hidden print:hidden">
         <div className="flex items-center gap-2">
-          <span className="rounded-md bg-white p-0.5">
-            <img src={logo} alt="" className="h-6 w-6" />
-          </span>
+          <LogoMark tone="white" className="h-6 w-6" />
           <span className="text-sm font-semibold">Flowcast</span>
         </div>
         <button
@@ -185,7 +203,10 @@ export function AppShell() {
       )}
 
       <main className="min-w-0 flex-1 p-6 lg:ml-[232px] lg:p-8 print:m-0 print:p-0">
-        <Outlet />
+        {/* Pages are code-split (see App.tsx); the sidebar stays while one loads. */}
+        <Suspense fallback={<PageLoading />}>
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   )

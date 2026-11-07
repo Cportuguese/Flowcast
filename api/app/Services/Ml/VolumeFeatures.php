@@ -23,7 +23,6 @@ class VolumeFeatures
      * @var array<int, string>
      */
     public const FEATURE_NAMES = [
-        'dow_1',
         'dow_2',
         'dow_3',
         'dow_4',
@@ -60,8 +59,12 @@ class VolumeFeatures
         $features = [];
         $dayOfWeek = $date->dayOfWeek;
 
-        /** Sunday (0) is the omitted baseline category. */
-        for ($day = 1; $day <= 6; $day++) {
+        /*
+         * Monday is the omitted baseline: the clinic never opens on Sunday,
+         * and with Sunday as the baseline the dummies always summed to one
+         * and duplicated the intercept (see WaitTimeFeatures::build()).
+         */
+        for ($day = 2; $day <= 6; $day++) {
             $features["dow_{$day}"] = $dayOfWeek === $day ? 1.0 : 0.0;
         }
 
